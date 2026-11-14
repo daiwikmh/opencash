@@ -2,11 +2,9 @@
 
 # opencash
 
-### Business payments for the world, from the dashboard or a chat.
+### Business payments for the world
 
-*Payments infrastructure on NEAR: any chain in, any chain out, settled in USDC.*
-
-*Invoices, payment links and a checkout API that accept any token on any chain; payouts and payroll to any chain; signed webhooks. Built on NEAR Intents, NEP-366 meta-transactions, passkeys and a Rust registry contract.*
+*Get paid by anyone, pay anyone, sign contracts and run it from chat: one account, opened with a fingerprint.*
 
 ![NEAR](https://img.shields.io/badge/NEAR-mainnet-00EC97)
 ![Track](https://img.shields.io/badge/track-Real--World%20Money-111111)
@@ -14,7 +12,9 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Status](https://img.shields.io/badge/status-live%20on%20mainnet-00EC97)
 
-**Live: [opencash.in](https://opencash.in)** · Registry: [`registry.opencash.near`](https://nearblocks.io/address/registry.opencash.near)
+**[Open the app ↗](https://opencash.in)** &nbsp;·&nbsp; [For bookkeepers](#for-bookkeepers-how-to-read-opencash) &nbsp;·&nbsp; [For judges](#for-judges) &nbsp;·&nbsp; [Features](#features) &nbsp;·&nbsp; [Architecture](#architecture) &nbsp;·&nbsp; [Security](#security--trust)
+
+<sub>Registry contract: <a href="https://nearblocks.io/address/registry.opencash.near"><code>registry.opencash.near</code></a></sub>
 
 </div>
 
@@ -28,7 +28,7 @@ opencash is a business bank-style account for getting paid and paying people, wh
 - **Records you can check.** Every invoice and payout has a status, a date and public transaction links that prove the money moved. Everything exports to CSV.
 - **No crypto chores.** Sign-in is a fingerprint or face scan (a passkey). There is no seed phrase to store and no "gas" fee to buy; opencash covers network fees.
 
-Live at **[opencash.in](https://opencash.in)**.
+---
 
 ## For bookkeepers: how to read opencash
 
@@ -104,6 +104,8 @@ Record the expense on the payout date for **Sent (USDC)**.
 
 One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipient received (amount, token, chain), their address, status, the NEAR transfer transaction, the delivery transaction on their chain, and the refund reason if any.
 
+---
+
 ## For judges
 
 1. Open **[opencash.in/app](https://opencash.in/app/)**.
@@ -127,8 +129,9 @@ Everything runs on **NEAR mainnet** with real USDC, so keep amounts small.
 
 The brief suggests testnet. opencash runs on mainnet because 1Click routes real liquidity.
 
-## For developers
+---
 
+## For developers
 
 A business with global customers and contractors is stuck between chains. Customers hold USDC on Base, ETH on Arbitrum, SOL or BTC. Contractors want to be paid on whatever chain they use. Accepting all of that, paying people back out, and keeping books an accountant can read normally means bridges, several wallets and gas tokens on every chain.
 
@@ -142,6 +145,8 @@ Five ways in:
 - **Chat**: a Telegram bot and an XMTP agent: `pay Ada 50 USDC on base to 0x…`, `request 120 from Northwind`, `balance`, `status`, with delivery updates pushed into the chat
 
 > The differentiator: one account and one signature cover both directions across chains. There is no seed phrase and no gas token to buy, and opencash never holds keys or funds. The account key is derived from a passkey, and opencash only pays gas for USDC transfers to addresses it quoted for that account and for creating its agent wallets; the business never signs a registry call.
+
+---
 
 ## Features
 
@@ -203,6 +208,8 @@ Five ways in:
 - **Formation intake**: the same details doola and Stripe Atlas collect (you, company, owners, IRS SS-4 questions), with an AI advisor (OpenAI) that suggests a Wyoming LLC or a Delaware C-Corp. Answers are encrypted in Postgres; only their SHA-256 goes on NEAR. Payments work without this
 - **Agreements signed with NEAR keys**: an Operating Agreement or Bylaws generated from the intake, a client service agreement generated from an invoice, or any uploaded PDF. Each party signs the document's SHA-256 with their own NEAR account key (a NEP-413 message, verified against the key on chain), using an opencash passkey or any NEAR wallet via `@hot-labs/near-connect`. No transaction or gas needed
 
+---
+
 ## Architecture
 
 ```mermaid
@@ -247,56 +254,7 @@ flowchart LR
 | `ft_on_transfer(sender_id, amount, msg = invoice id)` | the USDC contract only | NEAR-wallet invoice payment: check the token, invoice and amount, mark paid, forward to the business, return any excess; refund everything if forwarding fails |
 | `record_settlement(id, settle_tx)` | operator | records the wallet payment's transaction hash, once, after the backend verifies it on chain |
 
-### Where data lives
-
-| Data | Where | Survives restart |
-| --- | --- | --- |
-| Invoice public record: ID, business, total, details hash, status, paid date, settlement transaction, NEAR-wallet payer | NEAR contract | yes |
-| Invoice details: client, line items, due date, source, reference, deposit address, what the customer paid with | Postgres `invoices` (status mirrored from NEAR; NEAR wins) | yes; an invoice not yet recorded on NEAR is retried by the watcher |
-| Accounts (account, business or personal, legal name, country, invite code used) | Postgres `companies` | yes |
-| USDC balances, payout transfers | USDC contract on NEAR | yes |
-| Payouts, payroll batches, payees, payment links | Postgres | yes |
-| Chat links, one-time link codes, chat outbox (pending messages resume) | Postgres | yes |
-| API keys | Postgres, SHA-256 hash only | yes |
-| Webhook endpoints (secret encrypted) and delivery queue | Postgres | yes; pending deliveries resume |
-| Formation applications and agreement documents | Postgres, AES-256-GCM | yes |
-| Formation status, entity, application hash (optional) | Postgres `formations` | yes |
-| Agreements and NEP-413 signatures (account, public key, message, nonce, signature) | Postgres `agreements`, `agreement_signatures` | yes |
-| Agent wallets (encrypted key, caps, allowlist, status) and agent payments | Postgres `agents`, `agent_payments` | yes |
-| NEAR Intents x402 operations (quoted entry, operation token, deposit tx, facilitator receipt) | Postgres `agent_payments.operation`, `.receipt` | yes; a pending payment can be redeemed after a restart |
-| x402 sales settled by opencash's facilitator | Postgres `x402_settlements` | yes |
-| Facilitator duplicate-settlement guard | backend memory (`@x402/near` cache) | no; the on-chain nonce still stops a double spend |
-| Account signing key | nowhere; re-derived from the passkey | n/a |
-| Token list cache, rate limits, watcher "already running" flag | backend memory | no (rebuilt) |
-
-## Project structure
-
-```
-.
-├── contracts/registry/            Rust registry contract (public invoice records, NEAR-wallet payments) + 16 unit tests
-├── backend/
-│   ├── db/0{01..14}_*.sql         migrations: applications, documents, payouts, developer, chat, formations, agents, x402, companies + invoices, pay keys, invite codes, account type
-│   └── src/
-│       ├── index.ts               HTTP routes (/api/*, /v1/*)
-│       ├── invoices.ts            invoices: details in Postgres, public record on NEAR, merge + retry
-│       ├── relayer.ts             meta-transaction allowlist (quoted USDC payouts, agent creation)
-│       ├── payments.ts            inbound quotes, status → attestation, invoice watcher
-│       ├── payouts.ts             payout quotes, deposit registration, delivery watcher, payees
-│       ├── developer.ts           payment links, API keys, webhooks (sign, queue, retry)
-│       ├── agents.ts              agent wallets: caps, pay, x402 fetch (direct + NEAR Intents), redeem, sweep
-│       ├── intents402.ts          x402 near-intents payloads (quote, deposit, receipts)
-│       ├── facilitator.ts         opencash x402 facilitator on the operator relayer
-│       ├── chat/                  core.ts (commands) · outbox.ts (links, notifications) · telegram.ts · xmtp.ts
-│       ├── nearAuth.ts            NEP-413 request authentication
-│       ├── applications.ts · documents.ts · templates.ts · advisor.ts   optional formation + agreements
-│       ├── near.ts · vault.ts · db.ts · config.ts
-│       └── *.check.ts             runnable checks
-├── web/src/pages/                 index (landing) · app · pay · link · sign · send · chat-link
-├── mobile/src/screens/            Start · Home · Invoices · Payouts · Company · Formation · Account
-├── packages/shared/               types, passkey→NEAR key, API + 1Click clients, CSV, intake
-├── deploy/                        Dockerfile · docker-compose.yml (backend + Caddy) · Caddyfile for opencash.in
-└── docs/                          near-integration-brief.md · formation-research.md · submission.md
-```
+---
 
 ## Setup
 
@@ -355,18 +313,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | `TELEGRAM_BOT_TOKEN` | optional; token from @BotFather to run the Telegram bot (long polling, no public URL needed) |
 | `XMTP_WALLET_KEY`, `XMTP_DB_ENCRYPTION_KEY`, `XMTP_ENV`, `XMTP_DB_DIRECTORY` | optional; run the XMTP agent (`XMTP_ENV=production` for the Base app and other XMTP apps) |
 
-## Try it (do X, see Y)
-
-> **Dev mode** (only under `pnpm web`, never in production builds): `/app` shows **Dev mode · skip passkey**. It uses a fixed development key and the real account `dev.opencash.near`, so it needs the registry deployed. There is no sample data.
-
-1. Open http://localhost:4321 (or [opencash.in](https://opencash.in)) and click **Launch app**. If `INVITE_CODES` is set, enter a code. Enter your name, business name, an account name such as `acmestudio` with `.near` selected, and your country, then click **Create my account with a passkey**. **See** the dashboard with a USDC balance card for `acmestudio.near` and four colored quick actions.
-2. **Get paid by invoice:** click **New invoice**, add `Design sprint` / `5.00`, and **Create invoice**. Open the pay link in a private window, pick `USDC on arb`, add a refund address, and click **Get deposit address**. **See** an exact amount and a QR code. After paying, **see** the invoice turn **Paid** within about 20 seconds, with links to both chains.
-3. **Get paid by link:** in **Links**, create `Consulting hour` with no amount. Open the copied `/link?id=…`, enter a name and `25`, and click **Continue to payment**. **See** the same pay page for a new invoice that the dashboard marks as coming from a link.
-4. **Pay someone:** in **Payouts → One person**, pick `USDC on base`, paste an address, enter `2.00`, and click **Get quotes**. **See** what the recipient will receive. Tick the confirmation and click **Send with passkey**. **See** the payout move to **Delivered**, with the NEAR transfer and the Base delivery linked.
-5. **Run payroll:** switch to **Payroll** and import a CSV (`name,amount,chain,token,address`). Click **Get quotes**, then **Send with passkey**. **See** one signature send everyone their own token and chain. Click **Export CSV**.
-6. **Build on it:** in **Developers**, create an API key and add a webhook URL. Run the `curl` in the quickstart to create a checkout. **See** a `pay_url` in the response, and `invoice.pending` / `invoice.paid` deliveries listed under the endpoint once it's paid. Click **Send a test event** to see `test.ping`.
-7. **Remit from a chat:** set `TELEGRAM_BOT_TOKEN`, restart the backend, and message the bot `link`. Open the link and sign in. Then send `pay Ada 2 USDC on base to 0x…`. **See** a quote and a signing link; sign it, and **see** "Sent…" and then "Delivered…" appear in the chat. Send `request 25 from Northwind` and **see** a pay link.
-8. Export the invoice CSV and the payroll CSV, and read them with [the bookkeeper guide](#for-bookkeepers-how-to-read-opencash).
+---
 
 ## Security & trust
 
@@ -381,6 +328,8 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 - **Invite gate**: new accounts that cost opencash NEAR need an invite code with uses left (server-side check), so the operator's balance can't be drained by strangers
 - **Rate limits**: account opening is limited to 3 per IP per hour, and payment-link invoice creation to 20 per IP per hour.
 - The operator key and the encryption key live only in `backend/.env`, which is gitignored.
+
+---
 
 ## Status
 
@@ -424,6 +373,8 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | Formation filing with a provider (doola / FileForms) | ❌ not wired; see [docs/formation-research.md](docs/formation-research.md) |
 
 Known limits: if a payer requests a second quote for the same invoice, only the latest deposit address is tracked. Payouts can't be created through the API, because sending money requires the owner's passkey.
+
+---
 
 ## Credits
 
