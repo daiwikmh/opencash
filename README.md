@@ -40,6 +40,8 @@ Five ways in:
 3. No code? You can still join by connecting an **existing NEAR account** (pick *Existing account*). You approve adding your passkey once in your wallet.
 4. Create a small invoice, open its pay link in another window and pay from any chain. The invoice turns **Paid** with links to both chains.
 
+Only the business opens an account. Customers and payees never need one: they pay or get paid with whatever wallet and chain they already use.
+
 Everything runs on **NEAR mainnet** with real USDC, so keep amounts small.
 
 ### How opencash covers the Real-World Money track
