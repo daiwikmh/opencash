@@ -376,7 +376,10 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | Registry deployed to mainnet | ✅ `registry.opencash.near`, funded with 1.6 NEAR; on-chain `get_operator` = `opencash.near`, `get_usdc` = native USDC; registered with USDC |
 | Live deployment | ✅ [opencash.in](https://opencash.in) on Lightsail + Caddy: HTTPS for apex and `www`, `/api/health` ok, pages 200, http → https, www → apex |
 | Invite codes | ✅ against the local backend with a 15-use code: no code or wrong code for a new account → 403 before anything on chain; code is case-insensitive; existing account without a code passes the gate; existing account with a wrong code → 403. Live `POST /api/invites/check` answers on opencash.in. ⏳ the "used up" limit not hit yet |
-| End-to-end paid invoice, payout, payroll, link payment and webhook on mainnet | ⏳ not yet run |
+| End-to-end paid invoice on mainnet | ✅ `northwind.opencash.near-1`: $1.00 paid with 0.00057 ETH on Base, 1Click SUCCESS in about 30 s, exactly 1.00 USDC received, recorded `paid` on `registry.opencash.near` |
+| End-to-end payout on mainnet (from Telegram) | ✅ 0.05 USDC from `northwind.opencash.near` to `dev.opencash.near`, requested in the Telegram bot, signed with the passkey, status `completed` |
+| Agreement signed with passkeys | ✅ one agreement `executed` |
+| Payroll, link payment and webhook delivery on mainnet | ⏳ not yet run |
 | Mobile app on a device | ⏳ typechecks only; passkeys need a domain with iOS/Android association files |
 | Formation filing with a provider (doola / FileForms) | ❌ not wired; see [docs/formation-research.md](docs/formation-research.md) |
 
