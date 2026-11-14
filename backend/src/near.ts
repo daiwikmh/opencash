@@ -67,6 +67,7 @@ export async function openCompany(input: {
   publicKey: string;
   legalName: string;
   country: string;
+  inviteCode?: string;
 }): Promise<{ company: Company; txHash: string | null }> {
   const parent = operator();
   const accountId = input.accountId;
@@ -78,6 +79,6 @@ export async function openCompany(input: {
     deposit: nearToYocto("0.00125"),
     gas: teraToGas(30),
   });
-  const company = await registerCompany(accountId, input.legalName, input.country);
+  const company = await registerCompany(accountId, input.legalName, input.country, input.inviteCode);
   return { company: await withFormation(company), txHash };
 }

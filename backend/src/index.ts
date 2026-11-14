@@ -12,7 +12,7 @@ import { relay } from "./relayer.js";
 import { createAgreement, getAgreement, listAgreements, signAgreement, voidAgreement } from "./agreements.js";
 import { agentFetch, agentForKey, agentPay, agentPayments, agentSelf, createAgent, issueAgentKey, listAgents, redeemPayment, sweepAgent, updateAgent } from "./agents.js";
 import { listSettlements, settle as settleX402, supported as x402Supported, verify as verifyX402, type FacilitatorRequest } from "./facilitator.js";
-import { getBusiness, isCompany } from "./business.js";
+import { getBusiness, inviteError, inviteRequired, isCompany } from "./business.js";
 import { describeLinkCode, dispatchOutbox, enqueue, listLinks as listChatLinks, redeemLinkCode, unlinkFor, type Platform, type Sender } from "./chat/outbox.js";
 import { telegram } from "./chat/telegram.js";
 import { xmtp } from "./chat/xmtp.js";
@@ -71,7 +71,7 @@ app.post<{ Body: { country: string; plan: string; company: string } }>("/api/adv
 const accountKinds: AccountKind[] = ["near", "opencash", "existing"];
 
 app.post<{
-  Body: { kind?: AccountKind; accountId?: string; legalName: string; country: string; publicKey: string };
+  Body: { kind?: AccountKind; accountId?: string; legalName: string; country: string; publicKey: string; inviteCode?: string };
 }>("/api/companies", async (request) => {
   const { legalName, country, publicKey } = request.body ?? ({} as never);
   const kind = request.body?.kind ?? "opencash";
@@ -85,6 +85,9 @@ app.post<{
   }
   if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(publicKey ?? "")) fail(400, "Invalid passkey public key.");
   if (!legalName?.trim() || !country?.trim()) fail(400, "Business name and country are required.");
+  const inviteCode = request.body?.inviteCode?.trim() || undefined;
+  const invite = kind === "existing" && !inviteCode ? null : await inviteError(inviteCode);
+  if (invite) fail(403, kind === "existing" ? invite : `${invite} Without a code, connect an existing NEAR account instead.`);
   if (kind === "existing") {
     if (!(await accountExists(accountId))) fail(404, `${accountId} doesn't exist on NEAR.`);
     if (!(await hasFullAccessKey(accountId, publicKey))) fail(403, `Add your passkey key to ${accountId} first.`);
@@ -95,7 +98,12 @@ app.post<{
   }
   if (await isCompany(accountId)) fail(409, `${accountId} already has an opencash account. Sign in instead.`);
   if (!allowOpening(request.ip)) fail(429, "Too many companies opened from this network. Try again in an hour.");
-  return openCompany({ kind, accountId, publicKey, legalName: legalName.trim(), country: country.trim() });
+  return openCompany({ kind, accountId, publicKey, legalName: legalName.trim(), country: country.trim(), inviteCode });
+});
+
+app.post<{ Body: { code?: string } }>("/api/invites/check", async (request) => {
+  const error = await inviteError(request.body?.code);
+  return { required: inviteRequired(), ok: !error, error };
 });
 
 app.get<{ Params: { account: string } }>("/api/companies/:account", async (request) => {

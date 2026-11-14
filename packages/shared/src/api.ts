@@ -53,8 +53,9 @@ export function createApi(base: string) {
 
   return {
     advise: (input: { country: string; plan: string; company: string }) => post<Advice>("/advisor", input),
-    createCompany: (input: { kind: AccountKind; accountId: string; legalName: string; country: string; publicKey: string }, auth?: string) =>
+    createCompany: (input: { kind: AccountKind; accountId: string; legalName: string; country: string; publicKey: string; inviteCode?: string }, auth?: string) =>
       call<{ company: Company; txHash: string | null }>("/companies", { method: "POST", body: JSON.stringify(input), headers: auth ? { "X-Near-Auth": auth } : {} }),
+    checkInvite: (code: string) => post<{ required: boolean; ok: boolean; error: string | null }>("/invites/check", { code }),
     company: (account: string) => call<Company>(`/companies/${account}`),
     balance: (account: string) => call<{ usdc: string }>(`/companies/${account}/balance`),
     invoices: (account: string) => call<Invoice[]>(`/companies/${account}/invoices`),

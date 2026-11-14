@@ -1,10 +1,27 @@
 import type { Company, CompanyStatus, Jurisdiction } from "shared";
+import { config } from "./config.js";
 import { db } from "./db.js";
 
 type ChainCompany = Pick<Company, "account_id" | "owner" | "legal_name" | "country" | "created_at_ms" | "updated_at_ms">;
 
-export async function registerCompany(account: string, legalName: string, country: string): Promise<ChainCompany> {
-  await db().query("insert into companies (account_id, legal_name, country) values ($1, $2, $3) on conflict (account_id) do nothing", [account, legalName, country]);
+export function inviteRequired(): boolean {
+  return config.inviteCodes.size > 0;
+}
+
+export async function inviteError(code: string | undefined): Promise<string | null> {
+  if (!inviteRequired()) return null;
+  const key = (code ?? "").trim().toUpperCase();
+  const limit = config.inviteCodes.get(key);
+  if (!limit) return "That invite code isn't valid. opencash is invite-only during judging.";
+  const { rows } = await db().query<{ used: number }>("select count(*)::int as used from companies where invite_code = $1", [key]);
+  return rows[0].used >= limit ? "That invite code has been used up." : null;
+}
+
+export async function registerCompany(account: string, legalName: string, country: string, inviteCode?: string): Promise<ChainCompany> {
+  await db().query(
+    "insert into companies (account_id, legal_name, country, invite_code) values ($1, $2, $3, $4) on conflict (account_id) do nothing",
+    [account, legalName, country, inviteCode ? inviteCode.trim().toUpperCase() : null],
+  );
   return (await companyRecord(account))!;
 }
 

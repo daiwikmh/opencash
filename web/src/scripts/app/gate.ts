@@ -47,11 +47,16 @@ export function initGate(onReady: (session: PasskeySession) => Promise<void>) {
     }
     if (!text("country")) return say(status, "Choose your country.", "error");
     const accountId = kind === "existing" ? name : accountFor(kind, name);
+    const inviteCode = text("invite") || undefined;
     startButton.disabled = true;
     try {
+      if (kind !== "existing" || inviteCode) {
+        const invite = await api.checkInvite(inviteCode ?? "");
+        if (!invite.ok) throw new Error(kind === "existing" ? invite.error! : `${invite.error} Without a code, pick "Existing account".`);
+      }
       say(status, "Create your passkey…");
       const session = await createPasskey(accountId, text("founder") || text("business"));
-      const input = { kind, accountId, legalName: text("business"), country: text("country"), publicKey: session.key.publicKey };
+      const input = { kind, accountId, legalName: text("business"), country: text("country"), publicKey: session.key.publicKey, inviteCode };
       if (kind === "existing") {
         if (!(await passkeyOnAccount(accountId, session.key.publicKey))) {
           say(status, `Connect the wallet that controls ${accountId}…`);

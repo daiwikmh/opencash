@@ -22,4 +22,11 @@ export const config = {
   databaseUrl: () => required("DATABASE_URL"),
   webUrl: (process.env.PUBLIC_WEB_URL ?? "http://localhost:4321").replace(/\/$/, ""),
   applicationKey: () => required("APPLICATION_KEY"),
+  inviteCodes: new Map(
+    (process.env.INVITE_CODES ?? "")
+      .split(",")
+      .map((entry) => entry.trim().split(":"))
+      .filter(([code]) => code)
+      .map(([code, limit]) => [code.toUpperCase(), Number(limit) || Infinity] as const),
+  ),
 };

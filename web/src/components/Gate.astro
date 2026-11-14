@@ -33,6 +33,7 @@ import { countries } from "../data/countries";
             <small class="gfield__hint" data-handle-preview>acmestudio.near · yours, not tied to opencash</small>
           </div>
           <label class="gfield"><span>Country</span><select name="country"><option value="">Choose…</option>{countries.map((c) => <option value={c}>{c}</option>)}</select></label>
+          <label class="gfield gfield--wide"><span>Invite code (optional)</span><input name="invite" autocapitalize="characters" spellcheck="false" placeholder="NEARJUDGES" /><small class="gfield__hint">Needed for a new .near or .opencash.near account. Without one, connect an existing NEAR account.</small></label>
         </div>
         <p class="gate__status" data-gate-status role="status"></p>
         <div class="gate__actions">
