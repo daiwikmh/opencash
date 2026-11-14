@@ -1,4 +1,4 @@
-import { decodeSignedDelegate, type SignedDelegate } from "near-api-js";
+import { baseEncode, decodeSignedDelegate, type SignedDelegate } from "near-api-js";
 import { maxBatch, type Payout } from "shared";
 import { config } from "./config.js";
 import { operator } from "./near.js";
@@ -44,6 +44,11 @@ async function payoutRefusal(delegate: Delegate, lookup: Lookup): Promise<string
   return null;
 }
 
+function keyText(key: unknown): string {
+  const data = (key as { ed25519Key?: { data: ArrayLike<number> }; data?: ArrayLike<number> }).ed25519Key?.data ?? (key as { data?: ArrayLike<number> }).data;
+  return data ? `ed25519:${baseEncode(Uint8Array.from(data))}` : String(key);
+}
+
 async function agentCreationRefusal(delegate: Delegate, agents: AgentLookup): Promise<string | null> {
   const prefix = delegate.receiverId.slice(0, -(delegate.senderId.length + 1));
   if (!prefix || prefix.includes(".")) return "Agents must be direct sub-accounts of the business.";
@@ -52,7 +57,7 @@ async function agentCreationRefusal(delegate: Delegate, agents: AgentLookup): Pr
   if (!add.addKey.accessKey.permission.fullAccess) return "The agent key must be the one opencash generated.";
   const pending = await agents(delegate.senderId, delegate.receiverId);
   if (!pending) return "Create the agent in opencash first.";
-  if (add.addKey.publicKey.toString() !== pending.public_key) return "The agent key must be the one opencash generated.";
+  if (keyText(add.addKey.publicKey) !== pending.public_key) return "The agent key must be the one opencash generated.";
   return null;
 }
 

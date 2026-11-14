@@ -17,9 +17,13 @@ import { countries } from "../data/countries";
       <form class="gate__form" data-start-form novalidate>
         <h1 class="gate__title">Payments for everyone</h1>
         <p class="gate__hint">Open a USDC business account on NEAR with one passkey. Invoice, take payments, pay people anywhere. No seed phrase, no gas. Your customers and payees don't need an account.</p>
+        <div class="gate__type" role="radiogroup" aria-label="Account type">
+          <label><input type="radio" name="accountType" value="business" checked /><span><b>Business</b><small>Invoices, payroll, company tools</small></span></label>
+          <label><input type="radio" name="accountType" value="personal" /><span><b>Personal</b><small>Get paid and pay anyone, just for you</small></span></label>
+        </div>
         <div class="gate__fields">
           <label class="gfield"><span>Your name</span><input name="founder" autocomplete="name" placeholder="Ada Okafor" /></label>
-          <label class="gfield"><span>Business name</span><input name="business" placeholder="Acme Studio" /></label>
+          <label class="gfield" data-business-only><span>Business name</span><input name="business" placeholder="Acme Studio" /></label>
           <div class="gfield gfield--wide">
             <span>Account name</span>
             <div class="gfield__name">
@@ -33,7 +37,7 @@ import { countries } from "../data/countries";
             <small class="gfield__hint" data-handle-preview>acmestudio.near · yours, not tied to opencash</small>
           </div>
           <label class="gfield"><span>Country</span><select name="country"><option value="">Choose…</option>{countries.map((c) => <option value={c}>{c}</option>)}</select></label>
-          <label class="gfield gfield--wide"><span>Invite code (optional)</span><input name="invite" autocapitalize="characters" spellcheck="false" placeholder="NEARJUDGES" /><small class="gfield__hint">Needed for a new .near or .opencash.near account. Without one, connect an existing NEAR account.</small></label>
+          <label class="gfield"><span>Invite code (optional)</span><input name="invite" type="password" autocomplete="off" autocapitalize="characters" spellcheck="false" /><small class="gfield__hint">For a new .near or .opencash.near</small></label>
         </div>
         <p class="gate__status" data-gate-status role="status"></p>
         <div class="gate__actions">

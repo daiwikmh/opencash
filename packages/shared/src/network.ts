@@ -1,6 +1,6 @@
 export const network = {
   id: "mainnet",
-  rpc: "https://rpc.mainnet.near.org",
+  rpc: "https://rpc.mainnet.fastnear.com",
   explorer: "https://nearblocks.io",
   parent: "opencash.near",
   contract: "registry.opencash.near",

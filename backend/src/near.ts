@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { Account, JsonRpcProvider, nearToYocto, teraToGas, type KeyPairString } from "near-api-js";
-import type { AccountKind, Company } from "shared";
+import type { AccountKind, AccountType, Company } from "shared";
 import { registerCompany, withFormation } from "./business.js";
 import { config } from "./config.js";
 
@@ -68,6 +68,7 @@ export async function openCompany(input: {
   legalName: string;
   country: string;
   inviteCode?: string;
+  accountType?: AccountType;
 }): Promise<{ company: Company; txHash: string | null }> {
   const parent = operator();
   const accountId = input.accountId;
@@ -79,6 +80,6 @@ export async function openCompany(input: {
     deposit: nearToYocto("0.00125"),
     gas: teraToGas(30),
   });
-  const company = await registerCompany(accountId, input.legalName, input.country, input.inviteCode);
+  const company = await registerCompany(accountId, input.legalName, input.country, input.inviteCode, input.accountType);
   return { company: await withFormation(company), txHash };
 }

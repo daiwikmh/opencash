@@ -22,6 +22,7 @@ async function enter(session: PasskeySession) {
   renderAccount();
   renderHome();
   renderCompany();
+  document.querySelector<HTMLElement>('[data-tab="company"]')!.hidden = state.company?.account_type === "personal";
   activateTab("home");
   const banner = document.querySelector<HTMLElement>("[data-preview]");
   if (banner && state.preview) {

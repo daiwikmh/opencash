@@ -1,4 +1,4 @@
-import type { Company, Invoice, InvoiceStatus, Jurisdiction, LineItem } from "./company.js";
+import type { AccountType, Company, Invoice, InvoiceStatus, Jurisdiction, LineItem } from "./company.js";
 import type { Intake } from "./intake.js";
 import type { Agreement, AgreementKind, StoredDocument } from "./agreements.js";
 import type { Payee, Payout, PayoutRequest } from "./payouts.js";
@@ -53,7 +53,7 @@ export function createApi(base: string) {
 
   return {
     advise: (input: { country: string; plan: string; company: string }) => post<Advice>("/advisor", input),
-    createCompany: (input: { kind: AccountKind; accountId: string; legalName: string; country: string; publicKey: string; inviteCode?: string }, auth?: string) =>
+    createCompany: (input: { kind: AccountKind; accountId: string; legalName: string; country: string; publicKey: string; inviteCode?: string; accountType?: AccountType }, auth?: string) =>
       call<{ company: Company; txHash: string | null }>("/companies", { method: "POST", body: JSON.stringify(input), headers: auth ? { "X-Near-Auth": auth } : {} }),
     checkInvite: (code: string) => post<{ required: boolean; ok: boolean; error: string | null }>("/invites/check", { code }),
     company: (account: string) => call<Company>(`/companies/${account}`),

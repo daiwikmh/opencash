@@ -1,7 +1,7 @@
 import { createIntentsClient, usdcAssetId, type IntentsToken, type Payment, type StatusResponse } from "shared";
 import { config } from "./config.js";
 import { emit } from "./developer.js";
-import { assertRecorded, attestInvoice, getInvoice, pendingInvoiceIds, publicInvoice, settleWalletPayment } from "./invoices.js";
+import { assertRecorded, attestInvoice, getInvoice, pendingInvoiceIds, publicInvoice, savePayment, settleWalletPayment } from "./invoices.js";
 import { provider } from "./near.js";
 
 const intents = createIntentsClient({ apiKey: config.oneClickJwt });
@@ -66,6 +66,10 @@ async function paymentFrom(status: StatusResponse): Promise<Payment> {
 
 export async function invoiceStatus(id: string) {
   let invoice = await getInvoice(id);
+  if (invoice.status === "paid" && !invoice.payment && invoice.deposit_address) {
+    const status = await intents.getStatus(invoice.deposit_address).catch(() => null);
+    if (status?.status === "SUCCESS") invoice = await savePayment(id, await paymentFrom(status));
+  }
   if (!invoice.deposit_address || invoice.status === "paid" || invoice.status === "refunded") {
     return { invoice, intents: null, originTx: invoice.payment?.origin_tx_url ?? null, settleTx: invoice.settle_tx };
   }

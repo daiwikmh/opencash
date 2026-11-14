@@ -1,8 +1,8 @@
-import type { Company, CompanyStatus, Jurisdiction } from "shared";
+import type { AccountType, Company, CompanyStatus, Jurisdiction } from "shared";
 import { config } from "./config.js";
 import { db } from "./db.js";
 
-type ChainCompany = Pick<Company, "account_id" | "owner" | "legal_name" | "country" | "created_at_ms" | "updated_at_ms">;
+type ChainCompany = Pick<Company, "account_id" | "account_type" | "owner" | "legal_name" | "country" | "created_at_ms" | "updated_at_ms">;
 
 export function inviteRequired(): boolean {
   return config.inviteCodes.size > 0;
@@ -17,22 +17,22 @@ export async function inviteError(code: string | undefined): Promise<string | nu
   return rows[0].used >= limit ? "That invite code has been used up." : null;
 }
 
-export async function registerCompany(account: string, legalName: string, country: string, inviteCode?: string): Promise<ChainCompany> {
+export async function registerCompany(account: string, legalName: string, country: string, inviteCode?: string, accountType: AccountType = "business"): Promise<ChainCompany> {
   await db().query(
-    "insert into companies (account_id, legal_name, country, invite_code) values ($1, $2, $3, $4) on conflict (account_id) do nothing",
-    [account, legalName, country, inviteCode ? inviteCode.trim().toUpperCase() : null],
+    "insert into companies (account_id, legal_name, country, invite_code, account_type) values ($1, $2, $3, $4, $5) on conflict (account_id) do nothing",
+    [account, legalName, country, inviteCode ? inviteCode.trim().toUpperCase() : null, accountType],
   );
   return (await companyRecord(account))!;
 }
 
 async function companyRecord(account: string): Promise<ChainCompany | null> {
-  const { rows } = await db().query<{ account_id: string; legal_name: string; country: string; created_ms: string }>(
-    "select account_id, legal_name, country, (extract(epoch from created_at) * 1000)::bigint::text as created_ms from companies where account_id = $1",
+  const { rows } = await db().query<{ account_id: string; account_type: AccountType; legal_name: string; country: string; created_ms: string }>(
+    "select account_id, account_type, legal_name, country, (extract(epoch from created_at) * 1000)::bigint::text as created_ms from companies where account_id = $1",
     [account],
   );
   const r = rows[0];
   if (!r) return null;
-  return { account_id: r.account_id, owner: r.account_id, legal_name: r.legal_name, country: r.country, created_at_ms: Number(r.created_ms), updated_at_ms: Number(r.created_ms) };
+  return { account_id: r.account_id, account_type: r.account_type, owner: r.account_id, legal_name: r.legal_name, country: r.country, created_at_ms: Number(r.created_ms), updated_at_ms: Number(r.created_ms) };
 }
 
 export async function isCompany(account: string): Promise<boolean> {

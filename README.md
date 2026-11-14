@@ -18,47 +18,46 @@
 
 </div>
 
-## What is opencash?
+## What opencash does, in plain words
 
-A business with global customers and contractors is stuck between chains. Customers hold USDC on Base, ETH on Arbitrum, SOL or BTC. Contractors want to be paid on whatever chain they use. Accepting all of that, paying people back out, and keeping books an accountant can read normally means bridges, several wallets and gas tokens on every chain.
+opencash is a business bank-style account for getting paid and paying people, where the customer and the payee can be anywhere and use whatever money app they already have.
 
-opencash gives a business one USDC account on NEAR, opened with a passkey. Money comes in from any chain through invoices, payment links or the checkout API, and always lands as exact USDC. Money goes out as payouts or payroll, and each recipient receives the token and chain they choose. NEAR Intents does the routing in both directions. Every invoice outcome is recorded on NEAR, every change fires a signed webhook, and every list exports as a CSV.
+- **One account, one currency.** The business holds **USDC**, a digital dollar that is always worth **$1.00**. Every invoice, balance and report is in US dollars. Nobody on the business side has to price or hold volatile crypto.
+- **Getting paid.** The business sends an invoice or a payment link. The customer pays with what they have (for example ETH on Base or USDC on Solana). It is converted on the way, and the business receives **exactly the invoice amount** in USDC. Any conversion cost is paid by the customer, on top.
+- **Paying people.** The business pays a contractor or runs payroll in USDC; each person receives the currency and network they asked for.
+- **Records you can check.** Every invoice and payout has a status, a date and public transaction links that prove the money moved. Everything exports to CSV.
+- **No crypto chores.** Sign-in is a fingerprint or face scan (a passkey). There is no seed phrase to store and no "gas" fee to buy; opencash covers network fees.
 
-Five ways in:
-- **Web app** (Astro): landing page at `/`, the dashboard at `/app`, and public pages `/pay?id=…` (pay an invoice), `/link?id=…` (payment link), `/sign?id=…` (sign an agreement) and `/add-key?account=…&key=…` (add a passkey to an existing NEAR account)
-- **Mobile app** (Expo / React Native): balance, invoices, payouts and agreements, with the same passkey
-- **HTTP API**: `POST /v1/checkouts`, `POST /v1/invoices`, `GET /v1/invoices/:id` with API keys
-- **Webhooks**: `invoice.*` and `payout.*` events, HMAC-signed and retried
-- **Chat**: a Telegram bot and an XMTP agent: `pay Ada 50 USDC on base to 0x…`, `request 120 from Northwind`, `balance`, `status`, with delivery updates pushed into the chat
-
-> The differentiator: one account and one signature cover both directions across chains. There is no seed phrase and no gas token to buy, and opencash never holds keys or funds. The account key is derived from a passkey, and opencash only pays gas for USDC transfers to addresses it quoted for that account and for creating its agent wallets; the business never signs a registry call.
-
-## For judges
-
-1. Open **[opencash.in/app](https://opencash.in/app/)**.
-2. Enter invite code **`NEARJUDGES`** to open a new `.near` or `.opencash.near` account. opencash pays the NEAR for it. The code is good for 15 accounts.
-3. No code? You can still join by connecting an **existing NEAR account** (pick *Existing account*). You approve adding your passkey once in your wallet.
-4. Create a small invoice, open its pay link in another window and pay from any chain. The invoice turns **Paid** with links to both chains.
-
-Only the business opens an account. Customers and payees never need one: they pay or get paid with whatever wallet and chain they already use.
-
-Everything runs on **NEAR mainnet** with real USDC, so keep amounts small.
-
-### How opencash covers the Real-World Money track
-
-| Track ask | opencash |
-| --- | --- |
-| Invoice page with amount, due date, line items and a pay button, routed through 1Click | `/pay?id=…`: line items, due date, total; the customer picks any token on any chain and gets an exact `EXACT_OUTPUT` 1Click quote |
-| Gasless for the business | NEP-366 meta-transactions through an allowlisted relayer; businesses never hold NEAR. The relayer sponsors only payouts to a 1Click address opencash quoted (exact amount, once) and agent creation. Invoice records are written by the operator through the authenticated API, not relayed (see [Security & trust](#security--trust)) |
-| Status tracking (paid / pending / refunded) with transaction links | Each invoice moves open → pending → paid or refunded. NEAR records it, with links to the origin-chain transaction and the NEAR settlement |
-| CSV an accountant can read without questions | Invoice and payroll CSVs, explained column by column in [For bookkeepers](#for-bookkeepers-how-to-read-opencash) |
-| Beyond the brief | Payouts and payroll to any chain, payment links, checkout API with signed webhooks, top-ups, AI agent wallets with x402, payments from Telegram/XMTP chat |
-
-The brief suggests testnet. opencash runs on mainnet because 1Click routes real liquidity.
+Live at **[opencash.in](https://opencash.in)**.
 
 ## For bookkeepers: how to read opencash
 
 Everything is priced in **US dollars** and settles in **USDC**, a stablecoin worth $1.00. You never need to price crypto.
+
+### What to record, and when
+
+| What happened | What to record | Amount | Date |
+| --- | --- | --- | --- |
+| Invoice turns **Paid** | Income (sales) | **Invoice amount (USD)** | Paid date |
+| Customer's conversion cost | Nothing: the customer paid it on top | n/a | n/a |
+| **Top up** (owner adds money from another chain) | Owner contribution or transfer, **not income** | USDC received | Top-up date |
+| Payout or payroll **Delivered** | Expense (contractor, salary) | **Sent (USDC)** | Payout date |
+| Payout **Refunded** / **Failed** | Nothing: the USDC came back to the account | n/a | n/a |
+| Network ("gas") fees | Nothing: opencash pays them, the business is never charged | $0 | n/a |
+
+The balance on the dashboard is the business's USDC on NEAR, so it equals cash at $1.00 per USDC.
+
+### A real example
+
+Invoice `northwind.opencash.near-1` for **$1.00** ("Design sprint"). The customer paid **0.00057 ETH on Base** (about $1.0037 at the time). opencash converted it and **1.00 USDC** arrived in `northwind.opencash.near`; the invoice turned **Paid**.
+
+Record **$1.00** of income on the paid date. The extra $0.0037 was the customer's conversion cost and never reached the business.
+
+### Proving a transaction
+
+- **Settlement transaction (NEAR)**: a public link showing the USDC arriving in the business account. Present on every paid invoice.
+- **Payment transaction (client's chain)**: a public link to the customer's own payment. It can be empty when the conversion service doesn't report it; the NEAR link is still the proof of receipt.
+- Each invoice is also recorded on NEAR with a fingerprint of its full details, so the invoice you hold can be shown to be the one that was paid, without the client's name or prices being public.
 
 ### Invoice statuses (money in)
 
@@ -104,6 +103,45 @@ Record the expense on the payout date for **Sent (USDC)**.
 ### Payroll CSV
 
 One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipient received (amount, token, chain), their address, status, the NEAR transfer transaction, the delivery transaction on their chain, and the refund reason if any.
+
+## For judges
+
+1. Open **[opencash.in/app](https://opencash.in/app/)**.
+2. Enter invite code **`NEARJUDGES`** to open a new `.near` or `.opencash.near` account. opencash pays the NEAR for it. The code is good for 15 accounts.
+3. No code? You can still join by connecting an **existing NEAR account** (pick *Existing account*). You approve adding your passkey once in your wallet. This adds a full-access key, which **Meteor blocks** for all apps; use MyNearWallet for this step.
+4. Create a small invoice, open its pay link in another window and pay from any chain. The invoice turns **Paid** with links to both chains.
+
+Only the business opens an account. Customers and payees never need one: they pay or get paid with whatever wallet and chain they already use.
+
+Everything runs on **NEAR mainnet** with real USDC, so keep amounts small.
+
+### How opencash covers the Real-World Money track
+
+| Track ask | opencash |
+| --- | --- |
+| Invoice page with amount, due date, line items and a pay button, routed through 1Click | `/pay?id=…`: line items, due date, total; the customer picks any token on any chain and gets an exact `EXACT_OUTPUT` 1Click quote |
+| Gasless for the business | NEP-366 meta-transactions through an allowlisted relayer; businesses never hold NEAR. The relayer sponsors only payouts to a 1Click address opencash quoted (exact amount, once) and agent creation. Invoice records are written by the operator through the authenticated API, not relayed (see [Security & trust](#security--trust)) |
+| Status tracking (paid / pending / refunded) with transaction links | Each invoice moves open → pending → paid or refunded. NEAR records it, with links to the origin-chain transaction and the NEAR settlement |
+| CSV an accountant can read without questions | Invoice and payroll CSVs, explained column by column in [For bookkeepers](#for-bookkeepers-how-to-read-opencash) |
+| Beyond the brief | Payouts and payroll to any chain, payment links, checkout API with signed webhooks, top-ups, AI agent wallets with x402, payments from Telegram/XMTP chat |
+
+The brief suggests testnet. opencash runs on mainnet because 1Click routes real liquidity.
+
+## For developers
+
+
+A business with global customers and contractors is stuck between chains. Customers hold USDC on Base, ETH on Arbitrum, SOL or BTC. Contractors want to be paid on whatever chain they use. Accepting all of that, paying people back out, and keeping books an accountant can read normally means bridges, several wallets and gas tokens on every chain.
+
+opencash gives a business one USDC account on NEAR, opened with a passkey. Money comes in from any chain through invoices, payment links or the checkout API, and always lands as exact USDC. Money goes out as payouts or payroll, and each recipient receives the token and chain they choose. NEAR Intents does the routing in both directions. Every invoice outcome is recorded on NEAR, every change fires a signed webhook, and every list exports as a CSV.
+
+Five ways in:
+- **Web app** (Astro): landing page at `/`, the dashboard at `/app`, and public pages `/pay?id=…` (pay an invoice), `/link?id=…` (payment link), `/sign?id=…` (sign an agreement) and `/add-key?account=…&key=…` (add a passkey to an existing NEAR account)
+- **Mobile app** (Expo / React Native): balance, invoices, payouts and agreements, with the same passkey
+- **HTTP API**: `POST /v1/checkouts`, `POST /v1/invoices`, `GET /v1/invoices/:id` with API keys
+- **Webhooks**: `invoice.*` and `payout.*` events, HMAC-signed and retried
+- **Chat**: a Telegram bot and an XMTP agent: `pay Ada 50 USDC on base to 0x…`, `request 120 from Northwind`, `balance`, `status`, with delivery updates pushed into the chat
+
+> The differentiator: one account and one signature cover both directions across chains. There is no seed phrase and no gas token to buy, and opencash never holds keys or funds. The account key is derived from a passkey, and opencash only pays gas for USDC transfers to addresses it quoted for that account and for creating its agent wallets; the business never signs a registry call.
 
 ## Features
 
@@ -152,6 +190,7 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 
 ### Account and signing
 - **Passkey account**: the passkey's PRF output is run through HKDF to make an ed25519 NEAR key. The same passkey gives the same key on every device it syncs to, and nothing is stored
+- **Business or personal**: sign-up starts with a choice. A **business** account gives a business name plus company tools (formation, agreements). A **personal** account skips the business name and hides company tools; invoices, links, payouts and top-ups work the same. Stored as `companies.account_type` (`business` default, `personal`)
 - **The business owns its name**: pick one of three at sign-up, all with the same passkey and no seed phrase:
   - **Your own `.near` name** (default), e.g. `adastudio.near`: opencash creates it through NEAR's public `near` registrar with your passkey key. It isn't tied to opencash
   - **An opencash name**, e.g. `adastudio.opencash.near`: a sub-account of `opencash.near`, created instantly
@@ -214,7 +253,7 @@ flowchart LR
 | --- | --- | --- |
 | Invoice public record: ID, business, total, details hash, status, paid date, settlement transaction, NEAR-wallet payer | NEAR contract | yes |
 | Invoice details: client, line items, due date, source, reference, deposit address, what the customer paid with | Postgres `invoices` (status mirrored from NEAR; NEAR wins) | yes; an invoice not yet recorded on NEAR is retried by the watcher |
-| Businesses (account, legal name, country, invite code used) | Postgres `companies` | yes |
+| Accounts (account, business or personal, legal name, country, invite code used) | Postgres `companies` | yes |
 | USDC balances, payout transfers | USDC contract on NEAR | yes |
 | Payouts, payroll batches, payees, payment links | Postgres | yes |
 | Chat links, one-time link codes, chat outbox (pending messages resume) | Postgres | yes |
@@ -236,7 +275,7 @@ flowchart LR
 .
 ├── contracts/registry/            Rust registry contract (public invoice records, NEAR-wallet payments) + 16 unit tests
 ├── backend/
-│   ├── db/0{01..13}_*.sql         migrations: applications, documents, payouts, developer, chat, formations, agents, x402, companies + invoices, pay keys, invite codes
+│   ├── db/0{01..14}_*.sql         migrations: applications, documents, payouts, developer, chat, formations, agents, x402, companies + invoices, pay keys, invite codes, account type
 │   └── src/
 │       ├── index.ts               HTTP routes (/api/*, /v1/*)
 │       ├── invoices.ts            invoices: details in Postgres, public record on NEAR, merge + retry
@@ -256,7 +295,7 @@ flowchart LR
 ├── mobile/src/screens/            Start · Home · Invoices · Payouts · Company · Formation · Account
 ├── packages/shared/               types, passkey→NEAR key, API + 1Click clients, CSV, intake
 ├── deploy/                        Dockerfile · docker-compose.yml (backend + Caddy) · Caddyfile for opencash.in
-└── docs/                          near-integration-brief.md · formation-research.md
+└── docs/                          near-integration-brief.md · formation-research.md · submission.md
 ```
 
 ## Setup

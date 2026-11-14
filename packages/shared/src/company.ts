@@ -6,8 +6,11 @@ export type InvoiceStatus = "open" | "pending" | "paid" | "refunded";
 
 export type LineItem = { description: string; amount: string };
 
+export type AccountType = "business" | "personal";
+
 export type Company = {
   account_id: string;
+  account_type?: AccountType;
   owner: string;
   legal_name: string;
   jurisdiction: Jurisdiction | null;

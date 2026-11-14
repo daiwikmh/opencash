@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { accountFor, accountIdPattern, fromUnits, handlePattern, type AccountKind, type AgreementKind, type Intake, type Invoice, type Payee, type PayoutRequest } from "shared";
+import { accountFor, accountIdPattern, fromUnits, handlePattern, type AccountKind, type AccountType, type AgreementKind, type Intake, type Invoice, type Payee, type PayoutRequest } from "shared";
 import { advise } from "./advisor.js";
 import { loadApplication, readApplication, submitApplication, type SignedRequest } from "./applications.js";
 import { generateDocument, readDocument, uploadDocument } from "./documents.js";
@@ -71,20 +71,23 @@ app.post<{ Body: { country: string; plan: string; company: string } }>("/api/adv
 const accountKinds: AccountKind[] = ["near", "opencash", "existing"];
 
 app.post<{
-  Body: { kind?: AccountKind; accountId?: string; legalName: string; country: string; publicKey: string; inviteCode?: string };
+  Body: { kind?: AccountKind; accountId?: string; legalName: string; country: string; publicKey: string; inviteCode?: string; accountType?: AccountType };
 }>("/api/companies", async (request) => {
   const { legalName, country, publicKey } = request.body ?? ({} as never);
   const kind = request.body?.kind ?? "opencash";
   const accountId = String(request.body?.accountId ?? "").trim().toLowerCase();
   if (!accountKinds.includes(kind)) fail(400, "kind must be near, opencash or existing.");
+  const accountType = request.body?.accountType ?? "business";
+  if (accountType !== "business" && accountType !== "personal") fail(400, "accountType must be business or personal.");
   if (kind === "existing") {
     if (!accountIdPattern.test(accountId)) fail(400, "Enter a NEAR account name, e.g. ada.business.near.");
   } else {
     const handle = accountId.split(".")[0];
     if (!handlePattern.test(handle) || accountFor(kind, handle) !== accountId) fail(400, "Name: lowercase letters, numbers and dashes, 1-32 characters.");
   }
+  if (accountId === config.parent || accountId === config.contract) fail(400, `${accountId} is opencash's own account. Pick a new name instead.`);
   if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(publicKey ?? "")) fail(400, "Invalid passkey public key.");
-  if (!legalName?.trim() || !country?.trim()) fail(400, "Business name and country are required.");
+  if (!legalName?.trim() || !country?.trim()) fail(400, accountType === "personal" ? "Your name and country are required." : "Business name and country are required.");
   const inviteCode = request.body?.inviteCode?.trim() || undefined;
   const invite = kind === "existing" && !inviteCode ? null : await inviteError(inviteCode);
   if (invite) fail(403, kind === "existing" ? invite : `${invite} Without a code, connect an existing NEAR account instead.`);
@@ -98,7 +101,7 @@ app.post<{
   }
   if (await isCompany(accountId)) fail(409, `${accountId} already has an opencash account. Sign in instead.`);
   if (!allowOpening(request.ip)) fail(429, "Too many companies opened from this network. Try again in an hour.");
-  return openCompany({ kind, accountId, publicKey, legalName: legalName.trim(), country: country.trim(), inviteCode });
+  return openCompany({ kind, accountId, publicKey, legalName: legalName.trim(), country: country.trim(), inviteCode, accountType });
 });
 
 app.post<{ Body: { code?: string } }>("/api/invites/check", async (request) => {

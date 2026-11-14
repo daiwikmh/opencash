@@ -264,6 +264,11 @@ export async function attestInvoice(
   return toInvoice(rows[0]);
 }
 
+export async function savePayment(id: string, payment: Payment): Promise<Invoice> {
+  const { rows } = await db().query<Row>(`update invoices set payment = coalesce(payment, $2) where id = $1 returning ${columns}`, [id, payment]);
+  return toInvoice(rows[0]);
+}
+
 export async function issueUnrecorded(log: (message: string) => void) {
   const { rows } = await db().query<Row>(`select ${columns} from invoices where not issued and created_at < now() - interval '10 seconds' order by created_at limit 20`);
   for (const row of rows) {

@@ -43,6 +43,13 @@
 .gate__title { margin: 0; font-size: clamp(44px, 6vw, 72px); font-weight: 400; letter-spacing: -0.05em; line-height: 1; }
 .gate__hint { margin: 0; font-size: 15px; color: rgba(255, 255, 255, 0.55); }
 .gate__fields { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 8px; width: 100%; }
+.gate__type { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; }
+.gate__type label { cursor: pointer; }
+.gate__type input { position: absolute; opacity: 0; pointer-events: none; }
+.gate__type span { display: grid; gap: 4px; height: 100%; padding: 12px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; color: #fff; }
+.gate__type small { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+.gate__type input:checked + span { border-color: #fff; background: rgba(255, 255, 255, 0.08); }
+.gate__type input:focus-visible + span { outline: 2px solid #fff; outline-offset: 2px; }
 .gfield { display: grid; gap: 6px; }
 .gfield span { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
 .gfield input { padding: 8px 0; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.28); border-radius: 0; background: transparent; font: inherit; font-size: 19px; color: #fff; outline: none; width: 100%; }
@@ -67,6 +74,21 @@
   .gate__panel { padding: 12px; }
   .gate__card { padding: 22px 20px; }
   .gate__fields { grid-template-columns: 1fr; gap: 18px; }
+}
+@media (min-width: 861px) {
+  .gate { height: 100dvh; min-height: 0; }
+  .gate__panel { min-height: 0; }
+  .gate__card { padding: 24px 32px; overflow-y: auto; }
+  .gate__form { gap: 16px; padding-bottom: 0; }
+  .gate__title { font-size: clamp(36px, 4vw, 52px); }
+  .gate__hint { font-size: 14px; }
+  .gate__fields { gap: 16px 28px; margin-top: 0; }
+  .gate__type span { padding: 10px 12px; gap: 2px; }
+  .gate .gfield input, .gate .gfield select { font-size: 17px; padding-top: 6px; padding-bottom: 6px; }
+  .gate__go, .gate__secondary { height: 48px; }
+  .gate__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; max-width: none; }
+  .gate__actions .gate__link { white-space: nowrap; }
+  .gate__actions .gate__go { padding: 0 28px; white-space: nowrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   .gate__logo path, .gate__lines i { animation: none; opacity: 1; stroke-dashoffset: 0; transform: none; }
@@ -97,3 +119,4 @@
 
 .gate__link { background: none; border: 0; padding: 12px 0; font: inherit; font-size: 13px; color: rgba(255, 255, 255, 0.7); cursor: pointer; text-align: center; }
 .gate__link:hover { color: #fff; }
+.gfield[hidden], .dash__menu-item[hidden] { display: none; }

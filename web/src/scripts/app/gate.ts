@@ -1,4 +1,4 @@
-import { accountFor, accountIdPattern, handlePattern, type AccountKind } from "shared";
+import { accountFor, accountIdPattern, handlePattern, network, type AccountKind, type AccountType } from "shared";
 import { api } from "../lib/api";
 import { errorText, query, say } from "../lib/dom";
 import { passkeyAuth, passkeyOnAccount } from "../lib/near";
@@ -29,11 +29,17 @@ export function initGate(onReady: (session: PasskeySession) => Promise<void>) {
     handleInput.placeholder = kind === "existing" ? "ada.business.near" : "acmestudio";
     preview.textContent =
       kind === "existing"
-        ? "Any NEAR account you control. You'll approve adding your passkey in your wallet once."
+        ? "Any NEAR account you control. You'll approve adding your passkey once in MyNearWallet (Meteor blocks this)."
         : kind === "near"
           ? `${accountFor("near", name || "acmestudio")} · yours, not tied to opencash`
           : `${accountFor("opencash", name || "acmestudio")} · instant, under opencash`;
   };
+  const showType = () => {
+    const personal = (startForm.elements.namedItem("accountType") as RadioNodeList).value === "personal";
+    query("[data-business-only]").hidden = personal;
+    startButton.textContent = personal ? "Create my personal account with a passkey" : "Create my account with a passkey";
+  };
+  startForm.addEventListener("change", showType);
   startForm.addEventListener("input", showPreview);
   startForm.addEventListener("change", showPreview);
 
@@ -41,12 +47,15 @@ export function initGate(onReady: (session: PasskeySession) => Promise<void>) {
     event.preventDefault();
     const kind = text("kind") as AccountKind;
     const name = text("handle").toLowerCase();
-    if (!text("business")) return say(status, "Enter your business name.", "error");
+    const accountType = (startForm.elements.namedItem("accountType") as RadioNodeList).value as AccountType;
+    const personal = accountType === "personal";
+    if (personal ? !text("founder") : !text("business")) return say(status, personal ? "Enter your name." : "Enter your business name.", "error");
     if (kind === "existing" ? !accountIdPattern.test(name) : !handlePattern.test(name)) {
       return say(status, kind === "existing" ? "Enter your NEAR account, e.g. ada.business.near." : "Account name: lowercase letters, numbers and dashes.", "error");
     }
     if (!text("country")) return say(status, "Choose your country.", "error");
     const accountId = kind === "existing" ? name : accountFor(kind, name);
+    if (accountId === network.parent || accountId === network.contract) return say(status, `${accountId} is opencash's own account. Pick a new name instead.`, "error");
     const inviteCode = text("invite") || undefined;
     startButton.disabled = true;
     try {
@@ -56,7 +65,7 @@ export function initGate(onReady: (session: PasskeySession) => Promise<void>) {
       }
       say(status, "Create your passkey…");
       const session = await createPasskey(accountId, text("founder") || text("business"));
-      const input = { kind, accountId, legalName: text("business"), country: text("country"), publicKey: session.key.publicKey, inviteCode };
+      const input = { kind, accountId, accountType, legalName: personal ? text("founder") : text("business"), country: text("country"), publicKey: session.key.publicKey, inviteCode };
       if (kind === "existing") {
         if (!(await passkeyOnAccount(accountId, session.key.publicKey))) {
           say(status, `Connect the wallet that controls ${accountId}…`);
@@ -69,7 +78,7 @@ export function initGate(onReady: (session: PasskeySession) => Promise<void>) {
             await new Promise((resolve) => setTimeout(resolve, 1_000));
           }
         }
-        say(status, "Registering your business with opencash…");
+        say(status, personal ? "Registering your account with opencash…" : "Registering your business with opencash…");
         state.company = (await api.createCompany(input, await passkeyAuth(session, "open-company", accountId))).company;
       } else {
         say(status, `Opening ${accountId} on NEAR…`);
