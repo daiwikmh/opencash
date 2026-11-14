@@ -107,7 +107,7 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 ## For judges
 
 1. Open **[opencash.in/app](https://opencash.in/app/)**.
-2. Enter invite code **`NEARJUDGES`** to open a new `.near` or `.opencash.near` account. opencash pays the NEAR for it. The code is good for 15 accounts.
+2. Enter the **invite code from our submission description** to open a new `.near` or `.opencash.near` account. opencash pays the NEAR for it.
 3. No code? You can still join by connecting an **existing NEAR account** (pick *Existing account*). You approve adding your passkey once in your wallet. This adds a full-access key, which **Meteor blocks** for all apps; use MyNearWallet for this step.
 4. Create a small invoice, open its pay link in another window and pay from any chain. The invoice turns **Paid** with links to both chains.
 
@@ -197,7 +197,7 @@ Five ways in:
   - **An existing NEAR account**, e.g. `ada.business.near`: connect the wallet that controls it once to add your passkey key (skipped if the key is already there), then sign in with the passkey from then on. opencash checks the key is a full-access key on that account and that you signed with it. NEAR only lets the owner of `business.near` create `ada.business.near`, so this is how such names come in
   - In every case opencash registers the account for USDC and adds it to the registry. Web and mobile support all three. On mobile, the app opens `/add-key` in the phone's browser for the one wallet approval, waits until the key appears on NEAR, then finishes sign-up in the app
 - **Gasless**: NEP-366 meta-transactions through an allowlisted relayer
-- **Invite codes** (`INVITE_CODES=NEARJUDGES:15`): a new `.near` or `.opencash.near` account spends opencash's NEAR, so it needs a valid code with uses left. Connecting an existing NEAR account works without one. The code is checked before the passkey prompt and again on the server. Each company stores the code it used, and the count of companies with that code is the limit check. Leave `INVITE_CODES` empty for open sign-up
+- **Invite codes** (`INVITE_CODES=<code>:<limit>`): a new `.near` or `.opencash.near` account spends opencash's NEAR, so it needs a valid code with uses left. Connecting an existing NEAR account works without one. The code is checked before the passkey prompt and again on the server. Each company stores the code it used, and the count of companies with that code is the limit check. Leave `INVITE_CODES` empty for open sign-up
 
 ### Optional: US company formation and agreements
 - **Formation intake**: the same details doola and Stripe Atlas collect (you, company, owners, IRS SS-4 questions), with an AI advisor (OpenAI) that suggests a Wyoming LLC or a Delaware C-Corp. Answers are encrypted in Postgres; only their SHA-256 goes on NEAR. Payments work without this
@@ -349,7 +349,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | `PUBLIC_WEB_URL` | base for `pay_url` and link URLs returned by the API |
 | `ONECLICK_JWT` | optional partner key from partners.near-intents.org (lower fees) |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | optional formation advisor (`gpt-5.4-mini` by default) |
-| `INVITE_CODES` | optional; `CODE:limit` list, e.g. `NEARJUDGES:15`. When set, new `.near` / `.opencash.near` accounts need a valid code; existing accounts don't |
+| `INVITE_CODES` | optional; comma-separated `CODE:limit` list, e.g. `MYCODE:15`. When set, new `.near` / `.opencash.near` accounts need a valid code; existing accounts don't |
 | `NEW_ACCOUNT_NEAR` | NEAR sent to each new business account (default `0.01`) |
 | `WATCH_INTERVAL_MS` | invoice and payout watcher interval (default `20000`) |
 | `TELEGRAM_BOT_TOKEN` | optional; token from @BotFather to run the Telegram bot (long polling, no public URL needed) |
@@ -418,7 +418,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | Review fixes (`invoices.check.ts`) | ✅ pay key required on public routes (missing, empty, wrong or truncated key → not found; also checked live over HTTP); a fresh wallet payment shows as pending and writes nothing until final; a failed forward leaves the invoice open with no webhook; the payer must match; the watcher picks up wallet payments nobody opened the page for; an on-chain record with a different fingerprint is ignored and can't be quoted; a clashing ID on NEAR is refused; totals over $1B refused |
 | Registry deployed to mainnet | ✅ `registry.opencash.near`, funded with 1.6 NEAR; on-chain `get_operator` = `opencash.near`, `get_usdc` = native USDC; registered with USDC |
 | Live deployment | ✅ [opencash.in](https://opencash.in) on Lightsail + Caddy: HTTPS for apex and `www`, `/api/health` ok, pages 200, http → https, www → apex |
-| Invite codes | ✅ against the local backend with `INVITE_CODES=NEARJUDGES:15`: no code or wrong code for a new account → 403 before anything on chain; code is case-insensitive; existing account without a code passes the gate; existing account with a wrong code → 403. Live `POST /api/invites/check` answers on opencash.in. ⏳ the "used up" limit not hit yet |
+| Invite codes | ✅ against the local backend with a 15-use code: no code or wrong code for a new account → 403 before anything on chain; code is case-insensitive; existing account without a code passes the gate; existing account with a wrong code → 403. Live `POST /api/invites/check` answers on opencash.in. ⏳ the "used up" limit not hit yet |
 | End-to-end paid invoice, payout, payroll, link payment and webhook on mainnet | ⏳ not yet run |
 | Mobile app on a device | ⏳ typechecks only; passkeys need a domain with iOS/Android association files |
 | Formation filing with a provider (doola / FileForms) | ❌ not wired; see [docs/formation-research.md](docs/formation-research.md) |

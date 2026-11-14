@@ -1,6 +1,6 @@
 # Submission: What did you build?
 
-opencash: global finance for people. Live at https://opencash.in (invite code for judges: NEARJUDGES).
+opencash: global finance for people. Live at https://opencash.in
 
 The problem: a freelancer in Lagos, a two-person studio in Bangalore or a small team in Manila works for clients all over the world, but getting paid across borders is slow and expensive, paying collaborators abroad is worse, and the tools that fix it (a company, a business account, contracts, payroll) are built for people in a handful of countries.
 
