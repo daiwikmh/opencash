@@ -14,7 +14,7 @@
 
 **[Open the app ↗](https://opencash.in)** &nbsp;·&nbsp; [For bookkeepers](#for-bookkeepers-how-to-read-opencash) &nbsp;·&nbsp; [For judges](#for-judges) &nbsp;·&nbsp; [Features](#features) &nbsp;·&nbsp; [Architecture](#architecture) &nbsp;·&nbsp; [Security](#security--trust)
 
-<sub>Registry contract: <a href="https://nearblocks.io/address/registry.opencash.near"><code>registry.opencash.near</code></a></sub>
+**Contract on NEAR mainnet:** [`registry.opencash.near`](https://nearblocks.io/address/registry.opencash.near)
 
 </div>
 
@@ -116,6 +116,12 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 Only the business opens an account. Customers and payees never need one: they pay or get paid with whatever wallet and chain they already use.
 
 Everything runs on **NEAR mainnet** with real USDC, so keep amounts small.
+
+| Deployed on NEAR mainnet | |
+| --- | --- |
+| Invoice registry contract | [`registry.opencash.near`](https://nearblocks.io/address/registry.opencash.near) |
+| Operator and relayer account | [`opencash.near`](https://nearblocks.io/address/opencash.near) |
+| A real paid invoice | `northwind.opencash.near-1`: $1.00, paid from Base, settlement tx [`D3UPhToF…`](https://nearblocks.io/txns/D3UPhToFQEBXB2v6Pg5SJY4iKY9JCq6WUN2Kedqityew) |
 
 ### How opencash covers the Real-World Money track
 
@@ -244,6 +250,8 @@ flowchart LR
 | `packages/shared` | Types, passkey key derivation, API + 1Click clients, CSV, intake validation | `@noble/curves`, `@noble/hashes` |
 
 ### Registry contract methods
+
+Deployed at [`registry.opencash.near`](https://nearblocks.io/address/registry.opencash.near) (Rust, near-sdk 5.30).
 
 | Method | Who can call | What it does |
 | --- | --- | --- |
