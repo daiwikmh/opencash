@@ -35,8 +35,22 @@ export const folderPages: FolderPage[] = [
       ["DELIVERY", "NEAR Intents"],
       ["GAS", "Paid by opencash"],
     ],
-    caption: "Remittances without the wire fees.",
+    caption: "Payroll without the wire fees.",
     icon: "bins",
+  },
+  {
+    label: "FROM CHAT",
+    title: "Type it.\nSign it.",
+    description:
+      "Run payments from Telegram or XMTP: pay Ada 50 on base, request 120 from Northwind, balance. The chat prepares the payment and you approve it with your passkey, so the bot never holds your keys.",
+    facts: [
+      ["COMMANDS", "pay · request · balance · status"],
+      ["WHERE", "Telegram · XMTP"],
+      ["SIGNING", "Your passkey"],
+      ["UPDATES", "Paid, sent, delivered"],
+    ],
+    caption: "Pay the team from the group chat.",
+    icon: "terminal",
   },
   {
     label: "BUILD ON IT",
@@ -96,7 +110,7 @@ export const phone = {
 export const demoSteps = [
   {
     name: "Customer pays",
-    description: "Northwind pays a $1,250.50 invoice with USDC on Arbitrum. NEAR Intents delivers exactly $1,250.50 USDC to acme.opencash.near.",
+    description: "Northwind pays a $1,250.50 invoice with USDC on Arbitrum. NEAR Intents delivers exactly $1,250.50 USDC to acmestudio.near.",
     next: "Webhook fires",
   },
   {

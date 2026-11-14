@@ -2,8 +2,9 @@ import { nearToYocto, teraToGas } from "near-api-js";
 import { createIntentsClient, fromUnits, maxBatch, toUnits, txUrl, usdcAssetId, type Payee, type Payout, type PayoutRequest } from "shared";
 import { config } from "./config.js";
 import { db } from "./db.js";
-import { accountExists, operator, usdcBalance, view } from "./near.js";
+import { accountExists, operator, usdcBalance } from "./near.js";
 import { payTokens } from "./payments.js";
+import { isCompany } from "./business.js";
 
 const intents = createIntentsClient({ apiKey: config.oneClickJwt });
 
@@ -159,6 +160,5 @@ export async function deletePayee(company: string, id: string) {
 }
 
 export async function ensureCompany(account: string) {
-  const company = await view<{ account_id: string } | null>("get_company", { account_id: account });
-  if (!company) fail(403, "Only opencash business accounts can send payouts.");
+  if (!(await isCompany(account))) fail(403, "Only opencash business accounts can send payouts.");
 }

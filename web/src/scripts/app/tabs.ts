@@ -8,7 +8,7 @@ export function onTab(key: string, handler: () => void) {
 
 export function activateTab(key: string) {
   query("[data-dash]").dataset.tab = key;
-  for (const button of queryAll<HTMLButtonElement>("[data-tab]")) button.setAttribute("aria-selected", String(button.dataset.tab === key));
+  for (const button of queryAll<HTMLButtonElement>("[role=tab][data-tab]")) button.setAttribute("aria-selected", String(button.dataset.tab === key));
   for (const panel of queryAll("[data-panel]")) panel.hidden = panel.dataset.panel !== key;
   handlers.get(key)?.();
 }
@@ -27,6 +27,9 @@ export function initTabs() {
     trigger.setAttribute("aria-expanded", String(open));
   };
   trigger.addEventListener("click", () => setOpen(list.hidden));
+  list.addEventListener("click", (event) => {
+    if ((event.target as HTMLElement).closest("[data-tab]")) setOpen(false);
+  });
   document.addEventListener("click", (event) => {
     if (!menu.contains(event.target as Node)) setOpen(false);
   });

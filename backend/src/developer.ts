@@ -1,9 +1,8 @@
 import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
-import { teraToGas } from "near-api-js";
-import { fromUnits, toUnits, type Invoice, type LineItem } from "shared";
+import { fromUnits, payUrlFor, toUnits, type Invoice, type LineItem } from "shared";
 import { config } from "./config.js";
 import { db } from "./db.js";
-import { operator } from "./near.js";
+import { createInvoice } from "./invoices.js";
 import { eventMessage } from "./chat/core.js";
 import { notifyAccount } from "./chat/outbox.js";
 import { open, seal } from "./vault.js";
@@ -22,20 +21,15 @@ function randomId(length: number): string {
 
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 
-export function payUrl(invoiceId: string): string {
-  return `${config.webUrl}/pay?id=${encodeURIComponent(invoiceId)}`;
+export function payUrl(invoice: { id: string; pay_key?: string }): string {
+  return payUrlFor(config.webUrl, invoice);
 }
 
 export async function createInvoiceFor(
   company: string,
-  input: { client_name: string; due_ms: number; items: LineItem[]; source: "link" | "api" | "chat"; reference: string | null },
+  input: { client_name: string; due_ms: number; items: LineItem[]; source: "link" | "api" | "chat" | "topup"; reference: string | null },
 ): Promise<Invoice> {
-  return operator().callFunction<Invoice>({
-    contractId: config.contract,
-    methodName: "create_invoice_for",
-    args: { company, client_name: input.client_name, due_ms: input.due_ms, items: input.items, source: input.source, reference: input.reference },
-    gas: teraToGas(50),
-  });
+  return createInvoice(company, input);
 }
 
 export type PaymentLink = { id: string; company: string; title: string; description: string; amount: string | null; active: boolean; created_at: string; url: string };
@@ -91,7 +85,20 @@ export async function payLink(id: string, body: { payer_name?: string; amount?: 
     source: "link",
     reference: `link:${link.id}`,
   });
-  return { invoice_id: invoice.id, pay_url: payUrl(invoice.id) };
+  return { invoice_id: invoice.id, pay_url: payUrl(invoice) };
+}
+
+export async function topUp(company: string, body: { amount?: string }) {
+  const amount = String(body.amount ?? "").trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(amount) || Number(amount) < 1) fail(400, "Enter an amount of at least $1.00.");
+  const invoice = await createInvoiceFor(company, {
+    client_name: "Top-up",
+    due_ms: Date.now() + 86_400_000,
+    items: [{ description: "Top-up from another chain", amount }],
+    source: "topup",
+    reference: null,
+  });
+  return { invoice_id: invoice.id, pay_url: payUrl(invoice) };
 }
 
 export async function createApiKey(company: string, name: string) {

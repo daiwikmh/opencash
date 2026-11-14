@@ -1,7 +1,8 @@
 import { formatUsd, payoutStatusLabel, statusLabel, type Invoice, type PayToken } from "shared";
 import { config } from "../config.js";
 import { createInvoiceFor, payUrl } from "../developer.js";
-import { usdcBalance, view } from "../near.js";
+import { listInvoices } from "../invoices.js";
+import { usdcBalance } from "../near.js";
 import { payTokens } from "../payments.js";
 import { listPayees, listPayouts, quotePayouts } from "../payouts.js";
 import { createLinkCode, linkedAccount, unlink, type Platform } from "./outbox.js";
@@ -129,11 +130,11 @@ async function requestCommand(account: string, platform: Platform, cmd: Extract<
     source: "chat",
     reference: `chat:${platform}`,
   });
-  return [`Invoice ${invoice.id} for ${formatUsd(invoice.amount)} to ${cmd.from}.`, "Send them this link; they can pay from any chain:", payUrl(invoice.id)].join("\n");
+  return [`Invoice ${invoice.id} for ${formatUsd(invoice.amount)} to ${cmd.from}.`, "Send them this link; they can pay from any chain:", payUrl(invoice)].join("\n");
 }
 
 async function statusCommand(account: string): Promise<string> {
-  const [payouts, invoices] = await Promise.all([listPayouts(account), view<Invoice[]>("list_invoices", { account_id: account, from: 0, limit: 100 })]);
+  const [payouts, invoices] = await Promise.all([listPayouts(account), listInvoices(account)]);
   const lines = [
     ...invoices
       .sort((a, b) => b.created_at_ms - a.created_at_ms)

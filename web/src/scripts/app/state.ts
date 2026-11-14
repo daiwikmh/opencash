@@ -6,6 +6,7 @@ export const state: {
   session: PasskeySession | null;
   company: Company | null;
   invoices: Invoice[];
+  topups: Invoice[];
   advice: Advice | null;
   preview: string | null;
-} = { session: null, company: null, invoices: [], advice: null, preview: null };
+} = { session: null, company: null, invoices: [], topups: [], advice: null, preview: null };

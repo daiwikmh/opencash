@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import type { Agreement, AgreementKind, Invoice } from "shared";
+import type { Agreement, AgreementKind } from "shared";
 import { db } from "./db.js";
-import { view } from "./near.js";
+import { findInvoice } from "./invoices.js";
 import { verifyNearAuth } from "./nearAuth.js";
 
 function fail(statusCode: number, message: string): never {
@@ -53,7 +53,7 @@ export async function createAgreement(
   const { rows: docs } = await db().query("select 1 from documents where doc_hash = $1 and company = $2", [body.doc_hash, company]);
   if (!docs[0]) fail(400, "Upload or generate the document first.");
   if (body.kind === "service-agreement") {
-    const invoice = await view<Invoice | null>("get_invoice", { id: body.invoice_id ?? "" });
+    const invoice = await findInvoice(body.invoice_id ?? "");
     if (!invoice || invoice.company !== company) fail(400, "A service agreement must reference one of your own invoices.");
   }
   const { rows: count } = await db().query<{ n: string }>("select count(*) as n from agreements where company = $1", [company]);

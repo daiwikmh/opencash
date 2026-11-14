@@ -175,7 +175,7 @@ export function Formation({ session, company, onDone, onCancel }: FormationProps
                 </Pressable>
                 {advice && (
                   <View style={styles.advice}>
-                    <Text style={styles.adviceLabel}>OPENCASH ADVISOR · NEAR AI</Text>
+                    <Text style={styles.adviceLabel}>OPENCASH ADVISOR · AI</Text>
                     <Text style={styles.advicePick}>{jurisdictions[advice.jurisdiction].label}</Text>
                     <Text style={styles.adviceWhy}>{advice.reason}</Text>
                   </View>

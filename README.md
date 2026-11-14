@@ -2,7 +2,7 @@
 
 # opencash
 
-### Remittance for open worlds.
+### Business payments on any chain, from the dashboard or a chat.
 
 *Payments infrastructure on NEAR: any chain in, any chain out, settled in USDC.*
 
@@ -23,13 +23,13 @@ A business with global customers and contractors is stuck between chains. Custom
 opencash gives a business one USDC account on NEAR, opened with a passkey. Money comes in from any chain through invoices, payment links or the checkout API, and always lands as exact USDC. Money goes out as payouts or payroll, and each recipient receives the token and chain they choose. NEAR Intents does the routing in both directions. Every invoice outcome is recorded on NEAR, every change fires a signed webhook, and every list exports as a CSV.
 
 Five ways in:
-- **Web app** (Astro): landing page at `/`, the dashboard at `/app`, and public pages `/pay?id=…` (pay an invoice), `/link?id=…` (payment link) and `/sign?id=…` (sign an agreement)
+- **Web app** (Astro): landing page at `/`, the dashboard at `/app`, and public pages `/pay?id=…` (pay an invoice), `/link?id=…` (payment link), `/sign?id=…` (sign an agreement) and `/add-key?account=…&key=…` (add a passkey to an existing NEAR account)
 - **Mobile app** (Expo / React Native): balance, invoices, payouts and agreements, with the same passkey
 - **HTTP API**: `POST /v1/checkouts`, `POST /v1/invoices`, `GET /v1/invoices/:id` with API keys
 - **Webhooks**: `invoice.*` and `payout.*` events, HMAC-signed and retried
 - **Chat**: a Telegram bot and an XMTP agent: `pay Ada 50 USDC on base to 0x…`, `request 120 from Northwind`, `balance`, `status`, with delivery updates pushed into the chat
 
-> The differentiator: one account and one signature cover both directions across chains. There is no seed phrase and no gas token to buy, and opencash never holds keys or funds. The account key is derived from a passkey, and opencash only pays gas for registry calls and for USDC transfers to deposit addresses it quoted for that account.
+> The differentiator: one account and one signature cover both directions across chains. There is no seed phrase and no gas token to buy, and opencash never holds keys or funds. The account key is derived from a passkey, and opencash only pays gas for USDC transfers to addresses it quoted for that account and for creating its agent wallets; the business never signs a registry call.
 
 ## For bookkeepers: how to read opencash
 
@@ -43,6 +43,8 @@ Everything is priced in **US dollars** and settles in **USDC**, a stablecoin wor
 | **Payment in flight** (`pending`) | The customer asked for a deposit address and the payment is being processed (seconds to about 15 minutes). | Not yet |
 | **Paid** (`paid`) | The full invoice amount arrived as USDC. Final; it can't change afterwards. | **Yes, on the "Paid date"** |
 | **Refunded** (`refunded`) | The payment couldn't complete and went back to the customer. The reason is recorded. | No |
+
+Top-ups (money the business adds from another chain) are not invoices: they appear only in Home's activity, never in the invoice CSV, and are not income.
 
 If a payment attempt fails outright, the invoice goes back to **Waiting** so the customer can try again. Record income on the **Paid date** for the **Invoice amount (USD)**. The customer pays their own conversion and network costs on top.
 
@@ -60,7 +62,7 @@ Record the expense on the payout date for **Sent (USDC)**.
 
 | Column | What it is |
 | --- | --- |
-| Invoice ID | Unique number, e.g. `acme-3` |
+| Invoice ID | The business account plus a running number, e.g. `acmestudio.near-3` |
 | Client | Who was billed |
 | Issue date / Due date / Paid date | ISO dates (YYYY-MM-DD). Paid date is empty until the status is `paid`. |
 | Description | Line items, separated by `;` |
@@ -81,9 +83,11 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 ## Features
 
 ### Get paid from any chain
-- **Invoices**: client, due date and line items, stored in the registry contract with the total computed on chain. Created by a gasless meta-transaction
+- **Invoices, private by default**: client, due date and line items stay in opencash's database. NEAR gets a slim public record: the invoice ID, the business, the total, a SHA-256 fingerprint of the full invoice, and the status (open, pending, paid, refunded) with its transaction. Anyone holding the invoice can check it against that fingerprint; nobody can read a business's client list or prices from the chain. Each invoice also has a random 32-character pay key that is part of its pay link (`/pay?id=…&k=…`); without it the public invoice, quote, status and settlement routes answer "not found", so guessing IDs reveals nothing. Paid is final on chain
 - **Payment links** (`/link?id=…`): reusable, with a fixed or open amount. Each payment becomes an on-chain invoice, so it gets the same status, CSV row and webhooks
 - **Checkout API**: `POST /v1/checkouts` returns a `pay_url` for your customer
+- **Top up from any chain**: **Top up** on Home opens the same pay page for your own account, so a new business can fund itself with ETH, SOL, BTC or USDC on another chain. Top-ups are recorded on chain with source `topup` and are kept out of the Invoices list, the invoice CSV and revenue totals, because they are your own money, not income
+- **Activity**: Home lists money in and out together, each with its route (e.g. `ETH on arb → USDC`, `USDC → 0.003 BTC on btc`), status and proof link
 - **Pay page**: the customer picks a token and chain and gets an `EXACT_OUTPUT` NEAR Intents (1Click) quote, so the business receives exactly the amount due
 - **Trustworthy status**: `open → pending → paid / refunded`, written to the contract after 1Click reports the outcome, with links to both chains. A watcher checks in-flight invoices every 20 seconds, so nobody has to keep a page open
 
@@ -98,7 +102,7 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 - **Pay an invoice from a NEAR wallet**: the payer sends USDC to the registry with the invoice ID (`ft_transfer_call`). The contract checks the amount, marks the invoice paid, forwards the USDC to the business in the same transaction, and returns any excess. If forwarding fails, the invoice is restored and the payer is refunded automatically
 
 ### AI agent wallets
-- **An isolated spending account per agent**: `agent-<name>-xxxx.<business>.opencash.near`, created by one gasless passkey signature from the business. The agent has its own USDC balance; it can never touch the business's main account
+- **An isolated spending account per agent**: `agent-<name>-xxxx.<business account>`, created by one gasless passkey signature from the business. The agent has its own USDC balance; it can never touch the business's main account
 - **Budgets enforced before every signature**: per-payment cap, rolling 24-hour cap, an allowlist of NEAR accounts or API hosts, and freeze. Spending is reserved under a database lock, so concurrent calls can't overspend
 - **Agent API** with its own key: `GET /v1/agent`, `POST /v1/agent/pay {to, amount}`, `POST /v1/agent/fetch {url}`, `POST /v1/agent/payments/:id/redeem`. `fetch` pays x402 paywalls in USDC on NEAR by either of two methods:
   - **Direct NEAR (`exact`, `@fastnear/x402`)**: the agent signs a NEP-366 delegated `ft_transfer` to the seller, and the seller's facilitator relays it and pays gas
@@ -114,7 +118,7 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 - **Sell with x402 (opencash as facilitator)**: `GET /x402/facilitator/supported`, `POST /x402/facilitator/verify`, `POST /x402/facilitator/settle` (API key). Point any x402 v2 resource server, e.g. `createNearResourceServer` from `@fastnear/x402/server`, at `<api>/x402/facilitator`. Buyers sign a gasless USDC `ft_transfer` on NEAR; opencash's relayer submits it and pays the gas. The relayer only sponsors `exact` USDC payments on `near:mainnet` whose `payTo` is the API key's own business, of at least 0.01 USDC, and at most 600 settlements per business per hour. Each sale is recorded, shown under **Developers**, and sent as an `x402.paid` webhook
 - **Payouts stay out of the API on purpose**: sending money needs the owner's passkey, and opencash never holds keys
 
-### Remittance from a chat
+### Payments from a chat
 - **Telegram bot and XMTP agent** share one command set: `link`, `balance`, `pay <name> <amount> [token] [on <chain>] [to <address>]`, `pay <saved payee> <amount>`, `request <amount> from <name> [for <what>]`, `status`, `unlink`
 - **Non-custodial by design**: the chat never holds keys. `pay …` returns a quote and a link to `/send?ids=…`, where the owner signs with their passkey. `request …` returns a pay link anyone can pay from any chain
 - **Linking**: `link` returns a one-time, 15-minute code; opening `/chat-link?code=…` and signing a NEP-413 message binds the chat to the account
@@ -123,11 +127,15 @@ One row per payout: ID, date, batch, recipient, **Sent (USDC)**, what the recipi
 
 ### Account and signing
 - **Passkey account**: the passkey's PRF output is run through HKDF to make an ed25519 NEAR key. The same passkey gives the same key on every device it syncs to, and nothing is stored
-- **Named business account**: `handle.opencash.near`, created by the backend with your passkey key and registered with USDC
+- **The business owns its name**: pick one of three at sign-up, all with the same passkey and no seed phrase:
+  - **Your own `.near` name** (default), e.g. `adastudio.near`: opencash creates it through NEAR's public `near` registrar with your passkey key. It isn't tied to opencash
+  - **An opencash name**, e.g. `adastudio.opencash.near`: a sub-account of `opencash.near`, created instantly
+  - **An existing NEAR account**, e.g. `ada.business.near`: connect the wallet that controls it once to add your passkey key (skipped if the key is already there), then sign in with the passkey from then on. opencash checks the key is a full-access key on that account and that you signed with it. NEAR only lets the owner of `business.near` create `ada.business.near`, so this is how such names come in
+  - In every case opencash registers the account for USDC and adds it to the registry. Web and mobile support all three. On mobile, the app opens `/add-key` in the phone's browser for the one wallet approval, waits until the key appears on NEAR, then finishes sign-up in the app
 - **Gasless**: NEP-366 meta-transactions through an allowlisted relayer
 
 ### Optional: US company formation and agreements
-- **Formation intake**: the same details doola and Stripe Atlas collect (you, company, owners, IRS SS-4 questions), with a NEAR AI advisor that suggests a Wyoming LLC or a Delaware C-Corp. Answers are encrypted in Postgres; only their SHA-256 goes on NEAR. Payments work without this
+- **Formation intake**: the same details doola and Stripe Atlas collect (you, company, owners, IRS SS-4 questions), with an AI advisor (OpenAI) that suggests a Wyoming LLC or a Delaware C-Corp. Answers are encrypted in Postgres; only their SHA-256 goes on NEAR. Payments work without this
 - **Agreements signed with NEAR keys**: an Operating Agreement or Bylaws generated from the intake, a client service agreement generated from an invoice, or any uploaded PDF. Each party signs the document's SHA-256 with their own NEAR account key (a NEP-413 message, verified against the key on chain), using an opencash passkey or any NEAR wallet via `@hot-labs/near-connect`. No transaction or gas needed
 
 ## Architecture
@@ -142,7 +150,7 @@ flowchart LR
   B -- EXACT_OUTPUT quote / status --> I[NEAR Intents 1Click]
   C -- deposit --> I
   I -- USDC --> A[handle.opencash.near]
-  B -- create_invoice_for · attest_invoice --> R[(registry contract)]
+  B -- create_invoice · attest_invoice<br/>(id, total, hash, status) --> R[(registry contract)]
   subgraph Out[Money out]
     A -- one signed delegate: ft_transfer ×N --> B
     B -- relayMetaTransaction --> U[USDC contract]
@@ -157,7 +165,7 @@ flowchart LR
 
 | Component | Role | Backed by |
 | --- | --- | --- |
-| `contracts/registry` | Businesses, invoices (direct, link, API, chat), statuses, NEAR-wallet payment with forward and refund | NEAR contract state |
+| `contracts/registry` | Public invoice record (ID, business, total, details hash, status, transaction), NEAR-wallet payment with forward and refund | NEAR contract state |
 | `backend` | Accounts, relayer, inbound quotes, payouts, links, API keys, webhooks, watcher | Fastify, `near-api-js` 7.5.3, 1Click, Postgres |
 | `web` | Landing page, dashboard, pay / link / sign pages | Astro, WebAuthn PRF, `near-connect` |
 | `mobile` | Balance, invoices, payouts, agreements, optional formation | Expo, `react-native-passkey` PRF |
@@ -168,11 +176,9 @@ flowchart LR
 | Method | Who can call | What it does |
 | --- | --- | --- |
 | `new(operator, usdc)` | deployer, once | sets the operator and the USDC token |
-| `register_company(account_id, legal_name, country)` | operator | records a business |
-| `create_invoice(client_name, due_ms, items)` | the business (relayed) | invoice with `source: direct`, total computed on chain |
-| `create_invoice_for(company, client_name, due_ms, items, source, reference?)` | operator | invoice created from a payment link or the API |
-| `attest_invoice(id, status, deposit_address?, settle_tx?, payment?)` | operator | records the outcome, paid date and what the customer paid with; `paid` is final |
-| `list_pending`, `get_invoice`, `list_invoices` | anyone (view) | reads |
+| `create_invoice(id, company, amount, details_hash)` | operator | records an invoice's public record; the ID must start with the business account and can never be reused |
+| `attest_invoice(id, status, settle_tx?)` | operator | records the outcome and its transaction; `paid` is final |
+| `get_invoice`, `list_invoices` | anyone (view) | reads the public records |
 | `ft_on_transfer(sender_id, amount, msg = invoice id)` | the USDC contract only | NEAR-wallet invoice payment: check the token, invoice and amount, mark paid, forward to the business, return any excess; refund everything if forwarding fails |
 | `record_settlement(id, settle_tx)` | operator | records the wallet payment's transaction hash, once, after the backend verifies it on chain |
 
@@ -180,7 +186,9 @@ flowchart LR
 
 | Data | Where | Survives restart |
 | --- | --- | --- |
-| Invoices (all sources), statuses, paid date, customer payment details, transaction links | NEAR contract | yes |
+| Invoice public record: ID, business, total, details hash, status, paid date, settlement transaction, NEAR-wallet payer | NEAR contract | yes |
+| Invoice details: client, line items, due date, source, reference, deposit address, what the customer paid with | Postgres `invoices` (status mirrored from NEAR; NEAR wins) | yes; an invoice not yet recorded on NEAR is retried by the watcher |
+| Businesses (account, legal name, country) | Postgres `companies` | yes |
 | USDC balances, payout transfers | USDC contract on NEAR | yes |
 | Payouts, payroll batches, payees, payment links | Postgres | yes |
 | Chat links, one-time link codes, chat outbox (pending messages resume) | Postgres | yes |
@@ -200,12 +208,13 @@ flowchart LR
 
 ```
 .
-├── contracts/registry/            Rust registry contract + 16 unit tests
+├── contracts/registry/            Rust registry contract (public invoice records, NEAR-wallet payments) + 16 unit tests
 ├── backend/
-│   ├── db/0{01..10}_*.sql         migrations: applications, documents, payouts, developer, chat, formations, agents, x402
+│   ├── db/0{01..11}_*.sql         migrations: applications, documents, payouts, developer, chat, formations, agents, x402, companies + invoices
 │   └── src/
 │       ├── index.ts               HTTP routes (/api/*, /v1/*)
-│       ├── relayer.ts             meta-transaction allowlist (registry calls, quoted USDC payouts)
+│       ├── invoices.ts            invoices: details in Postgres, public record on NEAR, merge + retry
+│       ├── relayer.ts             meta-transaction allowlist (quoted USDC payouts, agent creation)
 │       ├── payments.ts            inbound quotes, status → attestation, invoice watcher
 │       ├── payouts.ts             payout quotes, deposit registration, delivery watcher, payees
 │       ├── developer.ts           payment links, API keys, webhooks (sign, queue, retry)
@@ -244,7 +253,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
    (cd backend && corepack pnpm db:migrate)
    (cd backend && npx tsx --env-file=.env src/developer.check.ts && npx tsx --env-file=.env src/applications.check.ts)
    ```
-4. Build and deploy the registry (spends about 3.5 NEAR from `PARENT_ACCOUNT`)
+4. Build and deploy the registry (spends 1.6 NEAR from `PARENT_ACCOUNT`: about 1.54 NEAR locks the 154 KB of code, the rest pays for the first ~20 invoice records at about 0.0025 NEAR each; top up `CONTRACT_ID` with plain NEAR transfers for more)
    ```bash
    (cd contracts/registry && cargo near build non-reproducible-wasm)
    (cd backend && corepack pnpm deploy:registry)
@@ -258,7 +267,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 
 | Variable | What it does |
 | --- | --- |
-| `PARENT_ACCOUNT` | mainnet account that owns `*.opencash.near`, acts as operator and relayer, and pays for deposit-address USDC registration |
+| `PARENT_ACCOUNT` | mainnet account that owns `*.opencash.near`, acts as operator and relayer, pays for new `.near` and `.opencash.near` accounts, and pays for deposit-address USDC registration |
 | `CONTRACT_ID` | registry account, a direct sub-account of `PARENT_ACCOUNT` |
 | `OPERATOR_PRIVATE_KEY` | full-access key of `PARENT_ACCOUNT` (`ed25519:…`) |
 | `X402_RELAYER_PRIVATE_KEY` | optional second full-access key of `PARENT_ACCOUNT` for the x402 facilitator, so its transactions don't race the operator's nonce; falls back to `OPERATOR_PRIVATE_KEY` |
@@ -266,7 +275,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | `APPLICATION_KEY` | 32-byte base64 key that encrypts webhook secrets, applications and documents |
 | `PUBLIC_WEB_URL` | base for `pay_url` and link URLs returned by the API |
 | `ONECLICK_JWT` | optional partner key from partners.near-intents.org (lower fees) |
-| `NEAR_AI_API_KEY`, `NEAR_AI_MODEL` | optional formation advisor (`Qwen/Qwen3.6-35B-A3B-FP8` by default) |
+| `OPENAI_API_KEY`, `OPENAI_MODEL` | optional formation advisor (`gpt-5.4-mini` by default) |
 | `NEW_ACCOUNT_NEAR` | NEAR sent to each new business account (default `0.01`) |
 | `WATCH_INTERVAL_MS` | invoice and payout watcher interval (default `20000`) |
 | `TELEGRAM_BOT_TOKEN` | optional; token from @BotFather to run the Telegram bot (long polling, no public URL needed) |
@@ -276,7 +285,7 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 
 > **Dev mode** (only under `pnpm web`, never in production builds): `/app` shows **Dev mode · skip passkey**. It uses a fixed development key and the real account `dev.opencash.near`, so it needs the registry deployed. There is no sample data.
 
-1. Open http://localhost:4321 and click **Launch app**. Enter your name, business name, handle `acme` and country, then click **Create my account with a passkey**. **See** the dashboard with a USDC balance card for `acme.opencash.near` and four colored quick actions.
+1. Open http://localhost:4321 and click **Launch app**. Enter your name, business name, an account name such as `acmestudio` with `.near` selected, and your country, then click **Create my account with a passkey**. **See** the dashboard with a USDC balance card for `acmestudio.near` and four colored quick actions.
 2. **Get paid by invoice:** click **New invoice**, add `Design sprint` / `5.00`, and **Create invoice**. Open the pay link in a private window, pick `USDC on arb`, add a refund address, and click **Get deposit address**. **See** an exact amount and a QR code. After paying, **see** the invoice turn **Paid** within about 20 seconds, with links to both chains.
 3. **Get paid by link:** in **Links**, create `Consulting hour` with no amount. Open the copied `/link?id=…`, enter a name and `25`, and click **Continue to payment**. **See** the same pay page for a new invoice that the dashboard marks as coming from a link.
 4. **Pay someone:** in **Payouts → One person**, pick `USDC on base`, paste an address, enter `2.00`, and click **Get quotes**. **See** what the recipient will receive. Tick the confirmation and click **Send with passkey**. **See** the payout move to **Delivered**, with the NEAR transfer and the Base delivery linked.
@@ -288,10 +297,10 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 ## Security & trust
 
 - **Non-custodial**: the account key never leaves the device and is never stored; it is re-derived from the passkey's PRF output. opencash cannot move a business's USDC.
-- **Relayer allowlist** (`backend/src/relayer.ts`, tested in `relayer.check.ts`): it pays gas only for (a) `create_invoice` on the registry, with no deposit and at most 100 TGas, and (b) USDC `ft_transfer`s from `*.opencash.near` whose memo names a payout opencash recorded **for that same account**, to that payout's exact address (1Click deposit address or NEAR name), for the **exact amount**, before it expires, with exactly 1 yoctoNEAR attached (the relayer pays that deposit, so it is capped), each payout once; and (c) creating an agent: a direct sub-account with exactly `CreateAccount + AddKey` of the key opencash generated for that pending agent. Anything else gets a 403.
+- **Relayer allowlist** (`backend/src/relayer.ts`, tested in `relayer.check.ts`): it sponsors only registered businesses (the `companies` table), whatever their name, and only for (a) nothing on the registry: invoices are created through the authenticated API and recorded on chain by the operator, and (b) USDC `ft_transfer`s from a registered business whose memo names a payout opencash recorded **for that same account**, to that payout's exact address (1Click deposit address or NEAR name), for the **exact amount**, before it expires, with exactly 1 yoctoNEAR attached (the relayer pays that deposit, so it is capped), each payout once; and (c) creating an agent: a direct sub-account with exactly `CreateAccount + AddKey` of the key opencash generated for that pending agent. Anything else gets a 403.
 - **API keys** are shown once and stored as SHA-256 hashes. **Webhook secrets** are encrypted with AES-256-GCM. Webhook URLs must be https (localhost is allowed for testing).
 - **Dashboard requests** that read private data (payouts, payees, links, keys, webhooks, documents) need a fresh NEP-413 signature from the account's full-access key.
-- **Only the operator** can attest invoice outcomes or create link/API invoices. `paid` is final.
+- **Only the operator** writes invoice records and outcomes on NEAR. `paid` is final, IDs can't be reused, and each record carries a SHA-256 of the full invoice so its details can be proven without being public. Each business can record up to 200 invoices a day, so no one can drain the registry's storage balance. A NEAR-wallet payment counts as paid only after the payer's transaction is verified final or 30 seconds have passed, so a forward that fails and refunds never sends a false `invoice.paid`. An ID already used on NEAR by a different invoice (different fingerprint) is never adopted.
 - **NEAR-wallet payments** are enforced by the contract itself: only the real USDC contract can pay, underpayments and paid invoices are refused, and a failed forward refunds the payer.
 - **x402 facilitator**: sponsors only USDC payments on NEAR to the API key's own business (min 0.01 USDC, 600 per hour), so a leaked key can't make opencash pay gas for other people's transfers. `@x402/near` checks the signature, the key, the amount, the recipient and the payer's balance before relaying.
 - **Agent wallets** are custodial for the agent's budget only (see above). Every agent payment passes the cap, allowlist and freeze checks first.
@@ -325,7 +334,14 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | Telegram bot against the real Telegram API | ⏳ needs a `TELEGRAM_BOT_TOKEN` |
 | Passkey key derivation, NEP-413 request auth, encrypted storage | ✅ `passkey.check.ts`, `documents.check.ts`, `applications*.check.ts` |
 | Web, mobile and backend typecheck; web build; landing and dashboard in Chrome | ✅ |
-| Registry deployed to mainnet | ⏳ needs `opencash.near` and about 3.5 NEAR |
+| Top up from any chain, Home activity, regrouped tabs | ✅ typecheck, contract test for the `topup` source, and screenshots in headless Chrome (dev mode, registry not deployed); ⏳ a real top-up not yet run |
+| Formation advisor on OpenAI (`gpt-5.4-mini`) | ✅ live calls: India/services → Wyoming LLC, Nigeria/venture → Delaware C-Corp, about 2 s each |
+| Business-owned names (`.near`, `.opencash.near`, existing account) | ✅ typecheck; relayer check covers `ada-studio.near` and `ada.business.near` being sponsored and an unregistered `.opencash.near` being refused; sign-up validation tested against mainnet (missing account → 404, key not on account → 403, taken name → 409); the `near` registrar's `create_account` confirmed in its on-chain code; screenshots of the picker on desktop and mobile. ⏳ No account created yet (needs `opencash.near` funded) |
+| Sign-up flow review (`signup.check.ts`) | ✅ against mainnet: a real full-access key is recognised, a function-call key or unknown key is not, an impostor signature and a signature for another action are rejected; `/api/companies` with a real account and key but no signature stops at 401; agents get names that fit under long business names (≤ 64 chars). The web flow now waits for NEAR to show the new key before registering, as mobile does |
+| Unique invoice IDs across businesses with the same first name (`ada.near`, `ada.business.near`, `ada.opencash.near`) | ✅ contract test; IDs are now `<account>-<n>` and the contract refuses to overwrite an existing ID |
+| Hybrid invoices (`invoices.check.ts`) | ✅ against Neon with an in-memory contract that follows the registry's rules: only the slim record goes on chain (no client name or line items), the details hash matches, same-first-name businesses get separate IDs, 5 concurrent invoices get distinct IDs, validation, pending → paid with `paid` final, a NEAR-wallet payment recorded only on chain shows up as paid and is written back to Postgres, an invoice that failed to reach NEAR is kept and recorded later by the watcher. Contract: 16 unit tests; 154 KB (was 207 KB) |
+| Review fixes (`invoices.check.ts`) | ✅ pay key required on public routes (missing, empty, wrong or truncated key → not found; also checked live over HTTP); a fresh wallet payment shows as pending and writes nothing until final; a failed forward leaves the invoice open with no webhook; the payer must match; the watcher picks up wallet payments nobody opened the page for; an on-chain record with a different fingerprint is ignored and can't be quoted; a clashing ID on NEAR is refused; totals over $1B refused |
+| Registry deployed to mainnet | ⏳ needs `opencash.near` funded with about 1.75 NEAR |
 | End-to-end paid invoice, payout, payroll, link payment and webhook on mainnet | ⏳ not yet run |
 | Mobile app on a device | ⏳ typechecks only; passkeys need a domain with iOS/Android association files |
 | Formation filing with a provider (doola / FileForms) | ❌ not wired; see [docs/formation-research.md](docs/formation-research.md) |
@@ -341,5 +357,5 @@ The UI shell (landing page, theme tokens, gate, dashboard cards, mobile tab bar 
 No license file committed yet.
 
 <div align="center">
-<sub>Built with <a href="https://near.org">NEAR</a> · <a href="https://docs.near-intents.org">NEAR Intents</a> · <a href="https://cloud.near.ai">NEAR AI Cloud</a> · <a href="https://astro.build">Astro</a> · <a href="https://expo.dev">Expo</a></sub>
+<sub>Built with <a href="https://near.org">NEAR</a> · <a href="https://docs.near-intents.org">NEAR Intents</a> · <a href="https://astro.build">Astro</a> · <a href="https://expo.dev">Expo</a></sub>
 </div>

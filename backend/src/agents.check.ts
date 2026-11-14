@@ -47,14 +47,15 @@ async function delegate(receiverId: string, list: ReturnType<typeof actions.crea
   const d = buildDelegateAction({ senderId: company, receiverId, actions: list, nonce: 1n, maxBlockHeight: 100n, publicKey: KeyPair.fromString(business.secretKey as KeyPairString).getPublicKey() });
   return (await signer.signDelegateAction(d)).signedDelegate.delegateAction;
 }
+const registered = async (account: string) => account === company;
 const pendingLookup = async (_c: string, account: string) => (account === agent.account_id ? { public_key } : null);
 const { PublicKey } = await import("near-api-js");
 const ok = await delegate(agent.account_id, [actions.createAccount(), actions.addFullAccessKey(PublicKey.fromString(public_key))]);
-assert.equal(await refusal(ok, undefined, pendingLookup), null, "creating the pending agent with opencash's key is sponsored");
+assert.equal(await refusal(ok, undefined, pendingLookup, registered), null, "creating the pending agent with opencash's key is sponsored");
 const otherKey = KeyPair.fromRandom("ed25519").getPublicKey();
-assert.match((await refusal(await delegate(agent.account_id, [actions.createAccount(), actions.addFullAccessKey(otherKey)]), undefined, pendingLookup))!, /opencash generated/);
-assert.match((await refusal(await delegate(agent.account_id, [actions.createAccount(), actions.addFullAccessKey(PublicKey.fromString(public_key)), actions.transfer(10n ** 24n)]), undefined, pendingLookup))!, /exactly CreateAccount \+ AddKey/, "no NEAR transfer rides along");
-assert.match((await refusal(await delegate(`x.${agent.account_id}`, [actions.createAccount(), actions.addFullAccessKey(PublicKey.fromString(public_key))]), undefined, pendingLookup))!, /direct sub-accounts/);
+assert.match((await refusal(await delegate(agent.account_id, [actions.createAccount(), actions.addFullAccessKey(otherKey)]), undefined, pendingLookup, registered))!, /opencash generated/);
+assert.match((await refusal(await delegate(agent.account_id, [actions.createAccount(), actions.addFullAccessKey(PublicKey.fromString(public_key)), actions.transfer(10n ** 24n)]), undefined, pendingLookup, registered))!, /exactly CreateAccount \+ AddKey/, "no NEAR transfer rides along");
+assert.match((await refusal(await delegate(`x.${agent.account_id}`, [actions.createAccount(), actions.addFullAccessKey(PublicKey.fromString(public_key))]), undefined, pendingLookup, registered))!, /direct sub-accounts/);
 
 await db().query("delete from agent_payments where agent_id = $1", [agent.id]);
 await db().query("delete from agents where company = $1", [company]);

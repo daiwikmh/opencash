@@ -42,8 +42,9 @@ export type Invoice = {
   settle_tx: string | null;
   paid_at_ms: number | null;
   payment: Payment | null;
-  source: "direct" | "link" | "api" | "chat";
+  source: "direct" | "link" | "api" | "chat" | "topup";
   reference: string | null;
+  pay_key?: string;
 };
 
 export const jurisdictions: Record<Jurisdiction, { label: string; short: string; summary: string }> = {

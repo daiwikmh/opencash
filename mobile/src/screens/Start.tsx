@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { handlePattern, network, type Company } from "shared";
+import { accountFor, accountIdPattern, handlePattern, type AccountKind, type Company } from "shared";
 import { AnimatedMark } from "../components/AnimatedMark";
 import { api } from "../lib/api";
+import { webUrl } from "../lib/config";
+import { passkeyAuth, passkeyOnAccount } from "../lib/near";
 import { createPasskey, signInWithPasskey, type PasskeySession } from "../lib/passkey";
 import { family, space } from "../theme";
 
@@ -15,6 +17,7 @@ export function Start({ onReady }: StartProps) {
   const [founder, setFounder] = useState("");
   const [business, setBusiness] = useState("");
   const [handle, setHandle] = useState("");
+  const [kind, setKind] = useState<AccountKind>("near");
   const [country, setCountry] = useState("");
   const [status, setStatus] = useState("");
   const [failed, setFailed] = useState(false);
@@ -41,12 +44,31 @@ export function Start({ onReady }: StartProps) {
     run(async () => {
       const name = handle.trim().toLowerCase();
       if (!business.trim()) return report("Enter your business name.", true);
-      if (!handlePattern.test(name)) return report("Handle: lowercase letters, numbers and dashes.", true);
+      if (kind === "existing" ? !accountIdPattern.test(name) : !handlePattern.test(name)) {
+        return report(kind === "existing" ? "Enter your NEAR account, e.g. ada.business.near." : "Account name: lowercase letters, numbers and dashes.", true);
+      }
       if (!country.trim()) return report("Enter your country.", true);
+      const accountId = kind === "existing" ? name : accountFor(kind, name);
       report("Create your passkey…");
-      const session = await createPasskey(`${name}.${network.parent}`, founder.trim() || business.trim());
-      report("Opening your USDC account on NEAR…");
-      const { company } = await api.createCompany({ handle: name, legalName: business.trim(), country: country.trim(), publicKey: session.key.publicKey });
+      const session = await createPasskey(accountId, founder.trim() || business.trim());
+      const input = { kind, accountId, legalName: business.trim(), country: country.trim(), publicKey: session.key.publicKey };
+      if (kind === "existing") {
+        if (!(await passkeyOnAccount(accountId, session.key.publicKey))) {
+          const key = session.key.publicKey;
+          report(`Approve in your wallet, in the browser. Key ${key.slice(8, 14)}…${key.slice(-6)}`);
+          await Linking.openURL(`${webUrl}/add-key?account=${encodeURIComponent(accountId)}&key=${encodeURIComponent(key)}`);
+          const deadline = Date.now() + 300_000;
+          while (!(await passkeyOnAccount(accountId, key))) {
+            if (Date.now() > deadline) return report("The key wasn't added within 5 minutes. Try again.", true);
+            await new Promise((resolve) => setTimeout(resolve, 3_000));
+          }
+        }
+        report("Registering your business with opencash…");
+        const { company } = await api.createCompany(input, await passkeyAuth(session, "open-company", accountId));
+        return onReady(session, company);
+      }
+      report(`Opening ${accountId} on NEAR…`);
+      const { company } = await api.createCompany(input);
       await onReady(session, company);
     });
 
@@ -90,7 +112,19 @@ export function Start({ onReady }: StartProps) {
             <View style={styles.fields}>
               <Field label="Your name" value={founder} onChange={setFounder} placeholder="Ada Okafor" />
               <Field label="Business name" value={business} onChange={setBusiness} placeholder="Acme Studio" />
-              <Field label={`Account · ${handle.trim().toLowerCase() || "acme"}.${network.parent}`} value={handle} onChange={setHandle} placeholder="acme" />
+              <Field
+                label={kind === "existing" ? "Your NEAR account" : `Account · ${accountFor(kind, handle.trim().toLowerCase() || "acmestudio")}`}
+                value={handle}
+                onChange={setHandle}
+                placeholder={kind === "existing" ? "ada.business.near" : "acmestudio"}
+              />
+              <View style={styles.kinds}>
+                {(["near", "opencash", "existing"] as const).map((k) => (
+                  <Pressable key={k} onPress={() => setKind(k)} hitSlop={space.xs} style={[styles.kind, kind === k && styles.kindOn]}>
+                    <Text style={[styles.kindLabel, kind === k && styles.kindLabelOn]}>{k === "near" ? ".near" : k === "opencash" ? ".opencash.near" : "Existing"}</Text>
+                  </Pressable>
+                ))}
+              </View>
               <Field label="Country" value={country} onChange={setCountry} placeholder="Nigeria" />
             </View>
             <Pressable disabled={busy} onPress={create} style={({ pressed }) => [styles.primary, (pressed || busy) && styles.pressed]}>
@@ -129,6 +163,11 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 24 },
   chip: { fontFamily: family.medium, fontSize: 11, letterSpacing: 0.6, color: "#d9d4ff", backgroundColor: "rgba(123, 115, 240, 0.25)", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
   switch: { fontFamily: family.regular, fontSize: 13, color: "rgba(255, 255, 255, 0.7)" },
+  kinds: { flexDirection: "row", gap: space.sm },
+  kind: { paddingHorizontal: space.md, paddingVertical: space.xs, borderRadius: 999, borderWidth: 1, borderColor: "rgba(255, 255, 255, 0.28)" },
+  kindOn: { backgroundColor: white, borderColor: white },
+  kindLabel: { fontFamily: family.medium, fontSize: 13, color: "rgba(255, 255, 255, 0.7)" },
+  kindLabelOn: { color: "#000" },
   title: { fontFamily: family.light, fontSize: 40, lineHeight: 44, letterSpacing: -1.8, color: white, marginTop: space.md },
   hint: { fontFamily: family.regular, fontSize: 15, lineHeight: 21, color: "rgba(255, 255, 255, 0.55)" },
   fields: { gap: space.md },

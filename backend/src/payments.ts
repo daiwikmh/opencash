@@ -1,8 +1,8 @@
-import { createIntentsClient, usdcAssetId, type Invoice, type IntentsToken, type Payment, type StatusResponse } from "shared";
+import { createIntentsClient, usdcAssetId, type IntentsToken, type Payment, type StatusResponse } from "shared";
 import { config } from "./config.js";
 import { emit } from "./developer.js";
-import { teraToGas } from "near-api-js";
-import { attestInvoice, operator, provider, view } from "./near.js";
+import { assertRecorded, attestInvoice, getInvoice, pendingInvoiceIds, publicInvoice, settleWalletPayment } from "./invoices.js";
+import { provider } from "./near.js";
 
 const intents = createIntentsClient({ apiKey: config.oneClickJwt });
 
@@ -19,15 +19,10 @@ export async function payTokens(): Promise<IntentsToken[]> {
   return tokens;
 }
 
-export async function getInvoice(id: string): Promise<Invoice> {
-  const invoice = await view<Invoice | null>("get_invoice", { id });
-  if (!invoice) throw Object.assign(new Error("Invoice not found"), { statusCode: 404 });
-  return invoice;
-}
-
-export async function quoteInvoice(id: string, originAsset: string, refundTo: string) {
-  const invoice = await getInvoice(id);
+export async function quoteInvoice(id: string, key: string, originAsset: string, refundTo: string) {
+  const invoice = await publicInvoice(id, key);
   if (invoice.status === "paid") throw Object.assign(new Error("This invoice is already paid."), { statusCode: 409 });
+  await assertRecorded(id);
   if (originAsset === usdcAssetId) throw Object.assign(new Error("Paying with USDC on NEAR? Use 'Pay with a NEAR wallet' instead; it settles instantly with no fee."), { statusCode: 400 });
   const tokens = await payTokens();
   const token = tokens.find((t) => t.assetId === originAsset);
@@ -102,13 +97,12 @@ export async function checkPending(log: (message: string) => void) {
   if (watching) return;
   watching = true;
   try {
-    const pending = await view<Invoice[]>("list_pending", { from: 0, limit: 100 });
-    for (const invoice of pending) {
+    for (const id of await pendingInvoiceIds()) {
       try {
-        const result = await invoiceStatus(invoice.id);
-        if (result.invoice.status !== "pending") log(`invoice ${invoice.id} is now ${result.invoice.status}`);
+        const result = await invoiceStatus(id);
+        if (result.invoice.status !== "pending") log(`invoice ${id} is now ${result.invoice.status}`);
       } catch (error) {
-        log(`invoice ${invoice.id} check failed: ${String(error)}`);
+        log(`invoice ${id} check failed: ${String(error)}`);
       }
     }
   } finally {
@@ -116,12 +110,9 @@ export async function checkPending(log: (message: string) => void) {
   }
 }
 
-export async function recordWalletSettlement(id: string, txHash: string, payer: string) {
-  const invoice = await getInvoice(id);
-  if (invoice.status !== "paid" || invoice.payment?.payer !== payer) {
-    throw Object.assign(new Error("This invoice isn't marked paid by that account on NEAR yet."), { statusCode: 409 });
-  }
-  if (invoice.settle_tx) return invoice;
+export async function recordWalletSettlement(id: string, key: string, txHash: string, payer: string) {
+  const invoice = await publicInvoice(id, key);
+  if (invoice.status === "paid" && invoice.settle_tx) return invoice;
   const tx = (await provider.viewTransactionStatus({ txHash, accountId: payer })) as unknown as {
     status: Record<string, unknown>;
     transaction: { signer_id: string; receiver_id: string; actions: { FunctionCall?: { method_name: string; args: string } }[] };
@@ -136,12 +127,5 @@ export async function recordWalletSettlement(id: string, txHash: string, payer: 
     String(args.msg).trim() === id &&
     "SuccessValue" in tx.status;
   if (!matches) throw Object.assign(new Error("That transaction is not a successful payment of this invoice."), { statusCode: 400 });
-  const recorded = await operator().callFunction<Invoice>({
-    contractId: config.contract,
-    methodName: "record_settlement",
-    args: { id, settle_tx: txHash },
-    gas: teraToGas(30),
-  });
-  await emit(recorded.company, "invoice.paid", recorded).catch(() => undefined);
-  return recorded;
+  return settleWalletPayment(id, payer, txHash);
 }

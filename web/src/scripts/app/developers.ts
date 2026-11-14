@@ -17,7 +17,7 @@ curl -X POST ${base}/v1/checkouts \\
   -H "Content-Type: application/json" \\
   -d '{"amount":"49.00","description":"Pro plan · 1 month","reference":"order_8812"}'
 
-# → { "id": "acme-7", "status": "open", "pay_url": "${location.origin}/pay?id=acme-7", ... }
+# → { "id": "acmestudio.near-7", "status": "open", "pay_url": "${location.origin}/pay?id=acmestudio.near-7&k=…", ... }
 
 # Create an invoice
 curl -X POST ${base}/v1/invoices \\
@@ -26,7 +26,7 @@ curl -X POST ${base}/v1/invoices \\
   -d '{"client_name":"Northwind","due_date":"2026-12-01","items":[{"description":"Design sprint","amount":"1250.50"}]}'
 
 # Read status
-curl ${base}/v1/invoices/acme-7 -H "Authorization: Bearer $OPENCASH_KEY"
+curl ${base}/v1/invoices/acmestudio.near-7 -H "Authorization: Bearer $OPENCASH_KEY"
 
 // Verify a webhook (Node)
 const [t, v1] = req.headers["opencash-signature"].split(",").map((p) => p.split("=")[1]);
@@ -44,7 +44,7 @@ const server = createNearResourceServer({
     },
   },
 });
-// accepts: { scheme: "exact", network: "near:mainnet", payTo: "${state.session?.accountId ?? "acme.opencash.near"}", price: "$0.01" }`;
+// accepts: { scheme: "exact", network: "near:mainnet", payTo: "${state.session?.accountId ?? "acmestudio.near"}", price: "$0.01" }`;
 }
 
 function render() {

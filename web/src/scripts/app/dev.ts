@@ -16,7 +16,8 @@ export async function devCompany(session: PasskeySession): Promise<Company> {
   } catch (error) {
     if (!String(error).includes("No company is registered")) throw error;
     const { company } = await api.createCompany({
-      handle,
+      kind: "opencash",
+      accountId: session.accountId,
       legalName: "opencash Dev Studio",
       country: "India",
       publicKey: session.key.publicKey,

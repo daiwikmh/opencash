@@ -1,15 +1,15 @@
-import { invoiceTotal, invoicesCsv, toUnits, txUrl, type Invoice, type LineItem } from "shared";
+import { invoiceTotal, invoicesCsv, payUrlFor, toUnits, txUrl, type Invoice, type LineItem } from "shared";
 import { api } from "../lib/api";
 import { date, errorText, esc, query, queryAll, say, statusTag, usdc } from "../lib/dom";
-import { relayCall } from "../lib/near";
+import { businessAuth } from "../lib/near";
 import { showToast } from "../lib/toast";
 import { closeModal, openModal } from "./modal";
 import { state } from "./state";
 
 let filter: "all" | "open" | "paid" = "all";
 
-export function payLink(id: string): string {
-  return `${location.origin}/pay?id=${encodeURIComponent(id)}`;
+export function payLink(invoice: Invoice): string {
+  return payUrlFor(location.origin, invoice);
 }
 
 export function invoiceTable(invoices: Invoice[], empty: string): string {
@@ -39,9 +39,11 @@ export async function loadInvoices() {
   const account = state.session.accountId;
   const list = await api.invoices(account);
   const pending = list.filter((inv) => inv.status === "pending");
-  const checked = await Promise.all(pending.map((inv) => api.status(inv.id).then((s) => s.invoice).catch(() => inv)));
+  const checked = await Promise.all(pending.map((inv) => api.status(inv.id, inv.pay_key ?? "").then((s) => s.invoice).catch(() => inv)));
   const fresh = new Map(checked.map((inv) => [inv.id, inv]));
-  state.invoices = list.map((inv) => fresh.get(inv.id) ?? inv).sort((a, b) => b.created_at_ms - a.created_at_ms);
+  const all = list.map((inv) => fresh.get(inv.id) ?? inv).sort((a, b) => b.created_at_ms - a.created_at_ms);
+  state.invoices = all.filter((inv) => inv.source !== "topup");
+  state.topups = all.filter((inv) => inv.source === "topup");
 }
 
 function paymentHtml(inv: Invoice): string {
@@ -73,7 +75,7 @@ export function renderInvoices() {
 function openInvoice(id: string) {
   const inv = state.invoices.find((i) => i.id === id);
   if (!inv) return;
-  const link = payLink(inv.id);
+  const link = payLink(inv);
   const items = inv.items.map((i) => `<div class="leg-row"><span>${esc(i.description)}</span><span>${usdc(toUnits(i.amount))}</span></div>`).join("");
   const body = openModal(
     `Invoice to ${inv.client_name}`,
@@ -137,7 +139,7 @@ export function openNewInvoice() {
     event.preventDefault();
     const submit = query<HTMLButtonElement>("[type=submit]", form);
     submit.disabled = true;
-    say(error, "Signing with your passkey key…");
+    say(error, "Creating the invoice…");
     try {
       const data = new FormData(form);
       const input = {
@@ -145,12 +147,12 @@ export function openNewInvoice() {
         due_ms: new Date(String(data.get("due"))).getTime(),
         items: items(),
       };
-      await relayCall(state.session!, "create_invoice", input);
+      const created = await api.createInvoice(await businessAuth(state.session!, "create-invoice"), input);
       await loadInvoices();
       renderInvoices();
       closeModal();
       showToast("Invoice created");
-      if (state.invoices[0]) openInvoice(state.invoices[0].id);
+      openInvoice(created.id);
     } catch (cause) {
       say(error, errorText(cause), "error");
       submit.disabled = false;

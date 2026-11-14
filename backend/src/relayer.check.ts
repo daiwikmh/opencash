@@ -15,7 +15,9 @@ const lookup = async (company: string, id: string) => (company === "acme.opencas
 const P1 = "opencash payout 11111111-1111-1111-1111-111111111111";
 const P2 = "opencash payout 22222222-2222-2222-2222-222222222222";
 const P3 = "opencash payout 33333333-3333-3333-3333-333333333333";
-const isSponsored = (d: Parameters<typeof refusal>[0]) => refusal(d, lookup);
+const companies = new Set(["acme.opencash.near", "globex.opencash.near", "ada-studio.near", "ada.business.near"]);
+const isCompany = async (account: string) => companies.has(account);
+const isSponsored = (d: Parameters<typeof refusal>[0]) => refusal(d, lookup, undefined, isCompany);
 
 const key = nearKeyFromPrf(new Uint8Array(32).fill(3));
 const signer = new KeyPairSigner(KeyPair.fromString(key.secretKey as KeyPairString));
@@ -33,17 +35,15 @@ async function signed(receiverId: string, action: ReturnType<typeof actions.func
   return decodeSignedDelegate(Buffer.from(base64Encode(encodeSignedDelegate(signedDelegate)), "base64"));
 }
 
-const invoice = actions.functionCall("create_invoice", { client_name: "X", due_ms: 1, items: [] }, teraToGas(50), 0n);
-const ok = await signed("registry.opencash.near", invoice);
-assert.equal(ok.delegateAction.publicKey.toString(), key.publicKey, "passkey-derived key signs the delegate");
-assert.equal(await isSponsored(ok.delegateAction), null, "create_invoice on our contract is sponsored");
-assert.match((await isSponsored((await signed("usdc.near", invoice)).delegateAction))!, /registry/);
-assert.match((await isSponsored((await signed("registry.opencash.near", invoice, "mallory.near")).delegateAction))!, /business accounts/);
-assert.match((await isSponsored((await signed("registry.opencash.near", actions.functionCall("attest_invoice", {}, teraToGas(50), 0n))).delegateAction))!, /not sponsored/);
-assert.match((await isSponsored((await signed("registry.opencash.near", actions.functionCall("create_invoice", {}, teraToGas(50), 1n))).delegateAction))!, /deposit/);
-assert.match((await isSponsored((await signed("registry.opencash.near", actions.functionCall("create_invoice", {}, teraToGas(300), 0n))).delegateAction))!, /gas/);
-assert.match((await isSponsored((await signed("registry.opencash.near", actions.functionCall("sign_agreement", { id: "acme-a1", doc_hash: "x" }, teraToGas(50), 0n))).delegateAction))!, /not sponsored/, "agreements are off-chain now");
 const transfer = (receiver: string, amount: string, memo: string | undefined, deposit = 1n) => actions.functionCall("ft_transfer", { receiver_id: receiver, amount, memo }, teraToGas(15), deposit);
+const ok = await signed(USDC, transfer("dep1", "5000000", P1));
+assert.equal(ok.delegateAction.publicKey.toString(), key.publicKey, "passkey-derived key signs the delegate");
+for (const method of ["create_invoice", "attest_invoice", "record_settlement", "sign_agreement"]) {
+  assert.match((await isSponsored((await signed("registry.opencash.near", actions.functionCall(method, {}, teraToGas(30), 0n))).delegateAction))!, /opencash API/, `${method} on the registry is never sponsored`);
+}
+assert.match((await isSponsored((await signed(USDC, transfer("dep1", "5000000", P1), "stranger.opencash.near")).delegateAction))!, /business accounts/, "an unregistered account under opencash.near is not sponsored");
+assert.match((await isSponsored((await signed(USDC, transfer("dep1", "5000000", P1), "mallory.near")).delegateAction))!, /business accounts/);
+assert.match((await isSponsored((await signed("wrap.near", transfer("dep1", "5000000", P1))).delegateAction))!, /quoted USDC payouts/);
 assert.equal(await isSponsored((await signed(USDC, [transfer("dep1", "5000000", P1), transfer("dep2", "2500000", P2)])).delegateAction), null, "a batch of quoted payouts is sponsored");
 assert.equal(await isSponsored((await signed(USDC, transfer("alice.near", "1000000", P3))).delegateAction), null, "a direct payout to a NEAR name is sponsored");
 assert.match((await isSponsored((await signed(USDC, transfer("attacker.near", "1000000", P3))).delegateAction))!, /different address/, "a direct payout can't be redirected");

@@ -11,3 +11,5 @@ contracts/*/target/
 .private/
 .wrangler/
 backend/.xmtp/
+
+deploy/backend.env

@@ -1,7 +1,8 @@
-import type { Company, Invoice, InvoiceStatus, Jurisdiction } from "./company.js";
+import type { Company, Invoice, InvoiceStatus, Jurisdiction, LineItem } from "./company.js";
 import type { Intake } from "./intake.js";
 import type { Agreement, AgreementKind, StoredDocument } from "./agreements.js";
 import type { Payee, Payout, PayoutRequest } from "./payouts.js";
+import type { AccountKind } from "./network.js";
 
 export type Advice = { jurisdiction: Jurisdiction; reason: string; filings: string[]; model: string };
 export type PayToken = { assetId: string; symbol: string; blockchain: string; decimals: number };
@@ -52,18 +53,19 @@ export function createApi(base: string) {
 
   return {
     advise: (input: { country: string; plan: string; company: string }) => post<Advice>("/advisor", input),
-    createCompany: (input: { handle: string; legalName: string; country: string; publicKey: string }) =>
-      post<{ company: Company; txHash: string }>("/companies", input),
+    createCompany: (input: { kind: AccountKind; accountId: string; legalName: string; country: string; publicKey: string }, auth?: string) =>
+      call<{ company: Company; txHash: string | null }>("/companies", { method: "POST", body: JSON.stringify(input), headers: auth ? { "X-Near-Auth": auth } : {} }),
     company: (account: string) => call<Company>(`/companies/${account}`),
     balance: (account: string) => call<{ usdc: string }>(`/companies/${account}/balance`),
     invoices: (account: string) => call<Invoice[]>(`/companies/${account}/invoices`),
     relay: (signedDelegate: string) => post<{ txHash: string; result: unknown }>("/relay", { signedDelegate }),
-    invoice: (id: string) => call<PublicInvoice>(`/invoices/${encodeURIComponent(id)}`),
+    invoice: (id: string, key: string) => call<PublicInvoice>(`/invoices/${encodeURIComponent(id)}?k=${encodeURIComponent(key)}`),
     tokens: () => call<PayToken[]>("/tokens"),
-    quote: (id: string, input: { originAsset: string; refundTo: string }) =>
-      post<PayQuote>(`/invoices/${encodeURIComponent(id)}/quote`, input),
-    settled: (id: string, body: { tx_hash: string; payer: string }) => post<Invoice>(`/invoices/${encodeURIComponent(id)}/settled`, body),
-    status: (id: string) => call<PayStatus>(`/invoices/${encodeURIComponent(id)}/status`),
+    quote: (id: string, key: string, input: { originAsset: string; refundTo: string }) =>
+      post<PayQuote>(`/invoices/${encodeURIComponent(id)}/quote?k=${encodeURIComponent(key)}`, input),
+    settled: (id: string, key: string, body: { tx_hash: string; payer: string }) =>
+      post<Invoice>(`/invoices/${encodeURIComponent(id)}/settled?k=${encodeURIComponent(key)}`, body),
+    status: (id: string, key: string) => call<PayStatus>(`/invoices/${encodeURIComponent(id)}/status?k=${encodeURIComponent(key)}`),
     quotePayouts: (auth: string, body: { items: PayoutRequest[]; label?: string }) =>
       call<{ batch_id: string | null; payouts: Payout[] }>("/payouts/quote", { method: "POST", body: JSON.stringify(body), headers: { "X-Near-Auth": auth } }),
     payouts: (auth: string) => call<Payout[]>("/payouts", { headers: { "X-Near-Auth": auth } }),
@@ -75,6 +77,10 @@ export function createApi(base: string) {
       call<PaymentLink>("/links", { method: "POST", body: JSON.stringify(body), headers: { "X-Near-Auth": auth } }),
     setLinkActive: (auth: string, id: string, active: boolean) =>
       call<PaymentLink>(`/links/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ active }), headers: { "X-Near-Auth": auth } }),
+    createInvoice: (auth: string, input: { client_name: string; due_ms: number; items: LineItem[] }) =>
+      call<Invoice>("/invoices", { method: "POST", body: JSON.stringify(input), headers: { "X-Near-Auth": auth } }),
+    topUp: (auth: string, amount: string) =>
+      call<{ invoice_id: string; pay_url: string }>("/topups", { method: "POST", body: JSON.stringify({ amount }), headers: { "X-Near-Auth": auth } }),
     publicLink: (id: string) => call<PaymentLink & { legal_name: string }>(`/public/links/${encodeURIComponent(id)}`),
     payLink: (id: string, body: { payer_name?: string; amount?: string }) => post<{ invoice_id: string; pay_url: string }>(`/public/links/${encodeURIComponent(id)}/pay`, body),
     apiKeys: (auth: string) => call<ApiKey[]>("/developer/keys", { headers: { "X-Near-Auth": auth } }),

@@ -1,7 +1,9 @@
-import { handlePattern, network } from "shared";
+import { accountFor, accountIdPattern, handlePattern, type AccountKind } from "shared";
 import { api } from "../lib/api";
 import { errorText, query, say } from "../lib/dom";
+import { passkeyAuth, passkeyOnAccount } from "../lib/near";
 import { createPasskey, passkeysSupported, signInWithPasskey, type PasskeySession } from "../lib/passkey";
+import { connectWallet, walletAddPasskey } from "../lib/wallet";
 import { devCompany, devSession, undeployedCompany } from "./dev";
 import { state } from "./state";
 
@@ -20,23 +22,54 @@ function text(name: string): string {
 export function initGate(onReady: (session: PasskeySession) => Promise<void>) {
   if (!passkeysSupported()) say(status, "This browser has no passkey support. Use Chrome, Safari or Edge.", "error");
 
-  startForm.addEventListener("input", () => {
-    preview.textContent = `${text("handle").toLowerCase() || "acme"}.${network.parent}`;
-  });
+  const handleInput = startForm.elements.namedItem("handle") as HTMLInputElement;
+  const showPreview = () => {
+    const kind = text("kind") as AccountKind;
+    const name = text("handle").toLowerCase();
+    handleInput.placeholder = kind === "existing" ? "ada.business.near" : "acmestudio";
+    preview.textContent =
+      kind === "existing"
+        ? "Any NEAR account you control. You'll approve adding your passkey in your wallet once."
+        : kind === "near"
+          ? `${accountFor("near", name || "acmestudio")} · yours, not tied to opencash`
+          : `${accountFor("opencash", name || "acmestudio")} · instant, under opencash`;
+  };
+  startForm.addEventListener("input", showPreview);
+  startForm.addEventListener("change", showPreview);
 
   startForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const handle = text("handle").toLowerCase();
+    const kind = text("kind") as AccountKind;
+    const name = text("handle").toLowerCase();
     if (!text("business")) return say(status, "Enter your business name.", "error");
-    if (!handlePattern.test(handle)) return say(status, "Account handle: lowercase letters, numbers and dashes.", "error");
+    if (kind === "existing" ? !accountIdPattern.test(name) : !handlePattern.test(name)) {
+      return say(status, kind === "existing" ? "Enter your NEAR account, e.g. ada.business.near." : "Account name: lowercase letters, numbers and dashes.", "error");
+    }
     if (!text("country")) return say(status, "Choose your country.", "error");
+    const accountId = kind === "existing" ? name : accountFor(kind, name);
     startButton.disabled = true;
     try {
       say(status, "Create your passkey…");
-      const session = await createPasskey(`${handle}.${network.parent}`, text("founder") || text("business"));
-      say(status, "Opening your USDC account on NEAR…");
-      const { company } = await api.createCompany({ handle, legalName: text("business"), country: text("country"), publicKey: session.key.publicKey });
-      state.company = company;
+      const session = await createPasskey(accountId, text("founder") || text("business"));
+      const input = { kind, accountId, legalName: text("business"), country: text("country"), publicKey: session.key.publicKey };
+      if (kind === "existing") {
+        if (!(await passkeyOnAccount(accountId, session.key.publicKey))) {
+          say(status, `Connect the wallet that controls ${accountId}…`);
+          await connectWallet();
+          say(status, `Approve adding your passkey to ${accountId} in your wallet…`);
+          await walletAddPasskey(accountId, session.key.publicKey);
+          say(status, "Waiting for NEAR to confirm your key…");
+          for (let attempt = 0; !(await passkeyOnAccount(accountId, session.key.publicKey)); attempt++) {
+            if (attempt >= 30) throw new Error("NEAR hasn't confirmed the new key yet. Try again in a minute.");
+            await new Promise((resolve) => setTimeout(resolve, 1_000));
+          }
+        }
+        say(status, "Registering your business with opencash…");
+        state.company = (await api.createCompany(input, await passkeyAuth(session, "open-company", accountId))).company;
+      } else {
+        say(status, `Opening ${accountId} on NEAR…`);
+        state.company = (await api.createCompany(input)).company;
+      }
       await onReady(session);
     } catch (error) {
       say(status, errorText(error), "error");

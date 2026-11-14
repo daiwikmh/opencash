@@ -1,6 +1,7 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { Account, JsonRpcProvider, nearToYocto, teraToGas, type KeyPairString } from "near-api-js";
-import type { Company, Invoice, InvoiceStatus, Payment } from "shared";
-import { withFormation } from "./business.js";
+import type { AccountKind, Company } from "shared";
+import { registerCompany, withFormation } from "./business.js";
 import { config } from "./config.js";
 
 export const provider = new JsonRpcProvider({ url: config.rpcUrl });
@@ -30,19 +31,46 @@ export async function usdcBalance(accountId: string): Promise<string> {
   return String(result ?? "0");
 }
 
+export async function hasFullAccessKey(accountId: string, publicKey: string): Promise<boolean> {
+  try {
+    const key = await provider.viewAccessKey({ accountId, publicKey });
+    return key.permission === "FullAccess";
+  } catch {
+    return false;
+  }
+}
+
+async function createAccount(kind: Exclude<AccountKind, "existing">, accountId: string, publicKey: string): Promise<string> {
+  const parent = operator();
+  const deposit = nearToYocto(config.newAccountNear as `${number}`);
+  if (kind === "opencash") {
+    const created = await parent.createSubAccount({ accountOrPrefix: accountId.slice(0, -(config.parent.length + 1)), publicKey, nearToTransfer: deposit });
+    return created.transaction.hash;
+  }
+  const outcome = await parent.callFunctionRaw({
+    contractId: "near",
+    methodName: "create_account",
+    args: { new_account_id: accountId, new_public_key: publicKey },
+    deposit,
+    gas: teraToGas(50),
+  });
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (await accountExists(accountId)) return outcome.transaction.hash;
+    await sleep(1_000);
+  }
+  throw Object.assign(new Error(`NEAR could not create ${accountId}. Pick another name.`), { statusCode: 409 });
+}
+
 export async function openCompany(input: {
-  handle: string;
+  kind: AccountKind;
+  accountId: string;
   publicKey: string;
   legalName: string;
   country: string;
-}): Promise<{ company: Company; txHash: string }> {
+}): Promise<{ company: Company; txHash: string | null }> {
   const parent = operator();
-  const accountId = `${input.handle}.${config.parent}`;
-  const created = await parent.createSubAccount({
-    accountOrPrefix: input.handle,
-    publicKey: input.publicKey,
-    nearToTransfer: nearToYocto(config.newAccountNear as `${number}`),
-  });
+  const accountId = input.accountId;
+  const txHash = input.kind === "existing" ? null : await createAccount(input.kind, accountId, input.publicKey);
   await parent.callFunction({
     contractId: config.usdc,
     methodName: "storage_deposit",
@@ -50,30 +78,6 @@ export async function openCompany(input: {
     deposit: nearToYocto("0.00125"),
     gas: teraToGas(30),
   });
-  const company = await parent.callFunction<Company>({
-    contractId: config.contract,
-    methodName: "register_company",
-    args: { account_id: accountId, legal_name: input.legalName, country: input.country },
-    gas: teraToGas(30),
-  });
-  return { company: await withFormation(company), txHash: created.transaction.hash };
-}
-
-export async function attestInvoice(
-  id: string,
-  status: InvoiceStatus,
-  extra: { deposit_address?: string; settle_tx?: string; payment?: Payment } = {},
-): Promise<Invoice> {
-  return operator().callFunction<Invoice>({
-    contractId: config.contract,
-    methodName: "attest_invoice",
-    args: {
-      id,
-      status,
-      deposit_address: extra.deposit_address ?? null,
-      settle_tx: extra.settle_tx ?? null,
-      payment: extra.payment ?? null,
-    },
-    gas: teraToGas(30),
-  });
+  const company = await registerCompany(accountId, input.legalName, input.country);
+  return { company: await withFormation(company), txHash };
 }

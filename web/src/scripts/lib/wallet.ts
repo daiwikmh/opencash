@@ -36,6 +36,18 @@ export async function walletSignAgreement(id: string, docHash: string): Promise<
   return walletAuth("sign-agreement", agreementSigningSubject(id, docHash));
 }
 
+export async function walletAddPasskey(accountId: string, publicKey: string): Promise<string> {
+  if (!current) throw new Error("Connect a NEAR wallet first.");
+  if (current.accountId !== accountId) throw new Error(`Your wallet is signed in as ${current.accountId}. Switch it to ${accountId}.`);
+  const outcome = await current.wallet.signAndSendTransaction({
+    network: "mainnet",
+    signerId: accountId,
+    receiverId: accountId,
+    actions: [{ type: "AddKey", params: { publicKey, accessKey: { permission: "FullAccess" } } }],
+  });
+  return outcome.transaction.hash;
+}
+
 export async function walletPayInvoice(id: string, amountUnits: string): Promise<string> {
   if (!current) throw new Error("Connect a NEAR wallet first.");
   const outcome = await current.wallet.signAndSendTransaction({

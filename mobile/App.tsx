@@ -7,7 +7,7 @@ import type { Advice, Company as CompanyRecord, Invoice, LineItem } from "shared
 import type { TabKey } from "./src/components/TabBar";
 import { Toast } from "./src/components/Toast";
 import { api } from "./src/lib/api";
-import { relayCall } from "./src/lib/near";
+import { businessAuth } from "./src/lib/near";
 import type { PasskeySession } from "./src/lib/passkey";
 import { showToast } from "./src/lib/toast";
 import { Account } from "./src/screens/Account";
@@ -42,7 +42,7 @@ export default function App() {
 
   async function refresh(account: string) {
     const [list, held] = await Promise.all([api.invoices(account), api.balance(account)]);
-    setInvoices(list.sort((a, b) => b.created_at_ms - a.created_at_ms));
+    setInvoices(list.filter((inv) => inv.source !== "topup").sort((a, b) => b.created_at_ms - a.created_at_ms));
     setBalance(held.usdc);
   }
 
@@ -56,7 +56,7 @@ export default function App() {
 
   async function createInvoice(input: { client_name: string; due_ms: number; items: LineItem[] }) {
     if (!session) return;
-    await relayCall(session, "create_invoice", input);
+    await api.createInvoice(await businessAuth(session, "create-invoice"), input);
     await refresh(session.accountId);
     setCreating(false);
     showToast("Invoice created");

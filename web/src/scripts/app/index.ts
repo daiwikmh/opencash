@@ -9,7 +9,7 @@ import { initDevelopers, loadDevelopers } from "./developers";
 import { initCompany, renderCompany } from "./company";
 import { initFormation, renderFormation } from "./formation";
 import { hideGate, initGate } from "./gate";
-import { initHome, loadBalance, renderHome } from "./home";
+import { initHome, loadActivity, loadBalance, renderHome } from "./home";
 import { initInvoices, loadInvoices, renderInvoices } from "./invoices";
 import "./modal";
 import { state } from "./state";
@@ -28,7 +28,7 @@ async function enter(session: PasskeySession) {
     banner.hidden = false;
     banner.querySelector("[data-preview-reason]")!.textContent = state.preview;
   }
-  await Promise.allSettled([loadInvoices().then(() => (renderHome(), renderInvoices())), loadBalance()]);
+  await Promise.allSettled([loadInvoices().then(() => (renderHome(), renderInvoices())), loadBalance(), loadActivity()]);
   if (state.preview) {
     for (const el of document.querySelectorAll<HTMLElement>(".table-wrap--loading")) {
       el.classList.remove("table-wrap--loading");

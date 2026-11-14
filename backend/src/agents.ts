@@ -79,9 +79,10 @@ export async function createAgent(company: string, body: { name: string; per_tx_
   const perTx = money(body.per_tx_cap, "Per-payment cap");
   const daily = money(body.daily_cap, "24-hour cap");
   if (BigInt(daily) < BigInt(perTx)) fail(400, "The 24-hour cap must be at least the per-payment cap.");
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 20) || "agent";
+  const room = Math.min(20, 64 - `agent--xxxx.${company}`.length);
+  if (room < 1) fail(400, "Your account name is too long to create agent sub-accounts under it.");
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, room).replace(/^-+|-+$/g, "") || "a";
   const accountId = `agent-${slug}-${randomBytes(2).toString("hex")}.${company}`;
-  if (accountId.length > 64) fail(400, "Your account name is too long to create agent sub-accounts under it.");
   const key = KeyPair.fromRandom("ed25519");
   const sealed = seal(key.toString(), `agent:${accountId}`);
   const allowlist = [...new Set((body.allowlist ?? []).map((a) => a.trim().toLowerCase()).filter(Boolean))].slice(0, 50);

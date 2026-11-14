@@ -1,0 +1,24 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: backend.env
+    restart: unless-stopped
+    volumes:
+      - xmtp:/app/backend/.xmtp
+  caddy:
+    image: caddy:2.10.2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../web/dist:/srv/web:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  xmtp:
+  caddy_data:
+  caddy_config:

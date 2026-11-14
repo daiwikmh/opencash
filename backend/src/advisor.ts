@@ -30,12 +30,11 @@ const system = [
 ].join(" ");
 
 export async function advise(input: { country: string; plan: string; company: string }): Promise<Advice> {
-  const response = await fetch("https://cloud-api.near.ai/v1/chat/completions", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.nearAiKey()}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.openAiKey()}` },
     body: JSON.stringify({
-      model: config.nearAiModel,
-      temperature: 0.2,
+      model: config.openAiModel,
       messages: [
         { role: "system", content: system },
         {
@@ -46,10 +45,10 @@ export async function advise(input: { country: string; plan: string; company: st
       response_format: { type: "json_schema", json_schema: { name: "advice", strict: true, schema } },
     }),
   });
-  if (!response.ok) throw new Error(`NEAR AI ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  if (!response.ok) throw new Error(`OpenAI ${response.status}: ${(await response.text()).slice(0, 200)}`);
   const body = (await response.json()) as { choices: { message: { content: string } }[] };
   const content = body.choices[0]?.message.content ?? "";
   const parsed = JSON.parse(content.slice(content.indexOf("{"), content.lastIndexOf("}") + 1)) as Omit<Advice, "model">;
   if (parsed.jurisdiction !== "wy-llc" && parsed.jurisdiction !== "de-ccorp") throw new Error("Advisor returned an unknown entity type.");
-  return { ...parsed, model: config.nearAiModel };
+  return { ...parsed, model: config.openAiModel };
 }

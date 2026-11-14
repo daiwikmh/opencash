@@ -1,0 +1,12 @@
+**/node_modules
+**/.env
+**/.env.*
+deploy/backend.env
+web
+mobile
+contracts
+docs
+**/.xmtp
+**/dist
+**/.astro
+**/.expo

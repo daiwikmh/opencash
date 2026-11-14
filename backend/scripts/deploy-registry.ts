@@ -12,8 +12,8 @@ const parent = operator();
 const key = KeyPair.fromString(config.operatorKey() as KeyPairString);
 
 if (!(await accountExists(config.contract))) {
-  console.log(`Creating ${config.contract} with 3.5 NEAR for contract storage…`);
-  await parent.createSubAccount({ accountOrPrefix: prefix, publicKey: key.getPublicKey(), nearToTransfer: nearToYocto("3.5") });
+  console.log(`Creating ${config.contract} with 1.6 NEAR for contract storage…`);
+  await parent.createSubAccount({ accountOrPrefix: prefix, publicKey: key.getPublicKey(), nearToTransfer: nearToYocto("1.6") });
 }
 
 const registry = new Account(config.contract, provider, config.operatorKey() as KeyPairString);

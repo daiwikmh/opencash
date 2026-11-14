@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Linking, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { formatUsd, invoiceTotal, invoicesCsv, statusLabel, toUnits, txUrl, type Invoice, type InvoiceStatus, type LineItem } from "shared";
+import { formatUsd, invoiceTotal, invoicesCsv, payUrlFor, statusLabel, toUnits, txUrl, type Invoice, type InvoiceStatus, type LineItem } from "shared";
 import { BottomSheet } from "../components/BottomSheet";
 import { TabBar, tabBarHeight, type TabKey } from "../components/TabBar";
 import { ArrowBadge, ScreenTitle, Switcher, Tag, ToneCard, tone } from "../components/ui";
@@ -10,8 +10,8 @@ import { dark, family, space, touch } from "../theme";
 
 const dots: Record<InvoiceStatus, string> = { open: tone.butter, pending: tone.sky, paid: tone.lime, refunded: tone.coral };
 
-export function payLink(id: string): string {
-  return `${webUrl}/pay?id=${encodeURIComponent(id)}`;
+export function payLink(invoice: Invoice): string {
+  return payUrlFor(webUrl, invoice);
 }
 
 function due(ms: number): string {
@@ -93,7 +93,7 @@ export function InvoiceSheet({ invoice, onClose }: { invoice: Invoice | null; on
             </View>
           ))}
           <Pressable
-            onPress={() => void Share.share({ message: `Invoice from opencash — pay from any chain: ${payLink(invoice.id)}` })}
+            onPress={() => void Share.share({ message: `Invoice from opencash — pay from any chain: ${payLink(invoice)}` })}
             style={({ pressed }) => [styles.primary, pressed && styles.pressed]}
           >
             <Text style={styles.primaryLabel}>Share pay link</Text>

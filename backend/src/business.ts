@@ -1,13 +1,32 @@
 import type { Company, CompanyStatus, Jurisdiction } from "shared";
 import { db } from "./db.js";
-import { view } from "./near.js";
 
 type ChainCompany = Pick<Company, "account_id" | "owner" | "legal_name" | "country" | "created_at_ms" | "updated_at_ms">;
 
+export async function registerCompany(account: string, legalName: string, country: string): Promise<ChainCompany> {
+  await db().query("insert into companies (account_id, legal_name, country) values ($1, $2, $3) on conflict (account_id) do nothing", [account, legalName, country]);
+  return (await companyRecord(account))!;
+}
+
+async function companyRecord(account: string): Promise<ChainCompany | null> {
+  const { rows } = await db().query<{ account_id: string; legal_name: string; country: string; created_ms: string }>(
+    "select account_id, legal_name, country, (extract(epoch from created_at) * 1000)::bigint::text as created_ms from companies where account_id = $1",
+    [account],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return { account_id: r.account_id, owner: r.account_id, legal_name: r.legal_name, country: r.country, created_at_ms: Number(r.created_ms), updated_at_ms: Number(r.created_ms) };
+}
+
+export async function isCompany(account: string): Promise<boolean> {
+  const { rows } = await db().query("select 1 from companies where account_id = $1", [account]);
+  return rows.length > 0;
+}
+
 export async function getBusiness(account: string): Promise<Company | null> {
-  const chain = await view<ChainCompany | null>("get_company", { account_id: account });
-  if (!chain) return null;
-  return withFormation(chain);
+  const record = await companyRecord(account);
+  if (!record) return null;
+  return withFormation(record);
 }
 
 export async function withFormation(chain: ChainCompany): Promise<Company> {

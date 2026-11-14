@@ -5,7 +5,9 @@ import { date, errorText, esc, query, say, usdc } from "../lib/dom";
 import { showToast } from "../lib/toast";
 import { connectWallet, walletPayInvoice } from "../lib/wallet";
 
-const id = new URLSearchParams(location.search).get("id") ?? "";
+const params = new URLSearchParams(location.search);
+const id = params.get("id") ?? "";
+const key = params.get("k") ?? "";
 const statusEl = query("[data-pay-status]");
 const quoteLine = query("[data-pay-quote]");
 const go = query<HTMLButtonElement>("[data-pay-go]");
@@ -25,6 +27,11 @@ function renderInvoice(invoice: PublicInvoice) {
   query("[data-pay-from]").textContent = `${invoice.legal_name} · ${invoice.company}`;
   query("[data-pay-amount]").textContent = usdc(invoice.amount);
   query("[data-pay-due]").textContent = `Billed to ${invoice.client_name} · due ${date(invoice.due_ms)}`;
+  if (invoice.source === "topup") {
+    document.title = "Top up · opencash";
+    query("[data-pay-from]").textContent = `Top up ${invoice.company}`;
+    query("[data-pay-due]").textContent = `Arrives as USDC in ${invoice.legal_name}'s account`;
+  }
   query("[data-pay-items]").innerHTML = invoice.items
     .map((item) => `<div class="leg-row"><span>${esc(item.description)}</span><span>${usdc(toUnits(item.amount))}</span></div>`)
     .join("");
@@ -43,7 +50,7 @@ function renderReceipt(status: PayStatus) {
 
 async function poll() {
   try {
-    const status = await api.status(id);
+    const status = await api.status(id, key);
     setStatus(status.invoice);
     renderReceipt(status);
     say(progress, status.intents ? `Intents: ${status.intents.replace(/_/g, " ").toLowerCase()}` : "Waiting for your deposit…");
@@ -58,8 +65,8 @@ async function poll() {
 }
 
 async function start() {
-  if (!id) return say(statusEl, "No invoice in this link.", "error");
-  const invoice = await api.invoice(id);
+  if (!id || !key) return say(statusEl, "This payment link is incomplete. Ask the business for the full link.", "error");
+  const invoice = await api.invoice(id, key);
   renderInvoice(invoice);
   if (invoice.status !== "open") {
     await poll();
@@ -75,7 +82,7 @@ async function start() {
       query("[data-pay-deposit]").hidden = false;
       const tx = await walletPayInvoice(invoice.id, invoice.amount);
       say(progress, "Paid on NEAR. Recording the receipt…");
-      await api.settled(invoice.id, { tx_hash: tx, payer }).catch(() => undefined);
+      await api.settled(invoice.id, key, { tx_hash: tx, payer }).catch(() => undefined);
       await poll();
     } catch (error) {
       say(progress, errorText(error), "error");
@@ -93,7 +100,7 @@ go.addEventListener("click", async () => {
   go.disabled = true;
   say(quoteLine, "Getting a quote…");
   try {
-    const quote = await api.quote(id, { originAsset: token.assetId, refundTo: refund.value.trim() });
+    const quote = await api.quote(id, key, { originAsset: token.assetId, refundTo: refund.value.trim() });
     say(quoteLine, `Quote valid until ${new Date(quote.deadline).toLocaleTimeString()}.`);
     query("[data-pay-send]").textContent = `Send exactly ${quote.amountIn} ${quote.symbol} on ${quote.blockchain}`;
     query("[data-pay-address]").textContent = quote.depositAddress + (quote.depositMemo ? `  memo ${quote.depositMemo}` : "");

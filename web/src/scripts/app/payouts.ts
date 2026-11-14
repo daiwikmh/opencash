@@ -13,7 +13,7 @@ let payees: Payee[] = [];
 let history: Payout[] = [];
 let quoted: Payout[] = [];
 
-const tone: Record<Payout["status"], string> = { quoted: "open", sent: "pending", completed: "paid", refunded: "refunded", failed: "refunded", expired: "refunded" };
+export const payoutTone: Record<Payout["status"], string> = { quoted: "open", sent: "pending", completed: "paid", refunded: "refunded", failed: "refunded", expired: "refunded" };
 
 function tokenOptions(selected = ""): string {
   return tokens
@@ -79,7 +79,7 @@ function renderHistory() {
   wrap.innerHTML = `<table class="data-table"><thead><tr><th>To</th><th>Receives</th><th>Date</th><th>Status</th><th class="cell-value">USDC</th></tr></thead><tbody>${shown
     .map(
       (p) => `<tr><td class="cell-identity">${esc(p.payee_name)}</td><td class="cell-muted">${esc(p.amount_out)} ${esc(p.symbol)} on ${esc(p.chain)}</td><td class="cell-muted">${date(Date.parse(p.created_at))}</td>
-        <td><span class="tag tag--${tone[p.status]}"><i class="tag__dot"></i>${payoutStatusLabel[p.status]}</span>${p.transfer_tx ? ` <a href="${txUrl(p.transfer_tx)}" target="_blank" rel="noopener">↗</a>` : ""}${p.delivery_tx_url ? ` <a href="${esc(p.delivery_tx_url)}" target="_blank" rel="noopener">delivered ↗</a>` : ""}</td>
+        <td><span class="tag tag--${payoutTone[p.status]}"><i class="tag__dot"></i>${payoutStatusLabel[p.status]}</span>${p.transfer_tx ? ` <a href="${txUrl(p.transfer_tx)}" target="_blank" rel="noopener">↗</a>` : ""}${p.delivery_tx_url ? ` <a href="${esc(p.delivery_tx_url)}" target="_blank" rel="noopener">delivered ↗</a>` : ""}</td>
         <td class="cell-value">${usdc(p.amount_units)}</td></tr>`,
     )
     .join("")}</tbody></table>`;

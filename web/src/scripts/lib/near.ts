@@ -13,8 +13,13 @@ export async function relayActions(session: PasskeySession, receiverId: string, 
   return txHash;
 }
 
-export function relayCall(session: PasskeySession, method: string, args: Record<string, unknown>): Promise<string> {
-  return relayActions(session, network.contract, [actions.functionCall(method, args, teraToGas(50), 0n)]);
+export async function passkeyOnAccount(accountId: string, publicKey: string): Promise<boolean> {
+  try {
+    const key = await provider.viewAccessKey({ accountId, publicKey });
+    return key.permission === "FullAccess";
+  } catch {
+    return false;
+  }
 }
 
 export function sendUsdc(session: PasskeySession, payouts: { id: string; deposit_address: string | null; recipient: string; kind: string; amount_units: string }[]): Promise<string> {

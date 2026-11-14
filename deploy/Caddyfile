@@ -1,0 +1,16 @@
+opencash.in {
+	encode gzip
+	@api path /api/* /v1/* /x402/*
+	handle @api {
+		reverse_proxy backend:8787
+	}
+	handle {
+		root * /srv/web
+		try_files {path} {path}/index.html {path}.html
+		file_server
+	}
+}
+
+www.opencash.in {
+	redir https://opencash.in{uri} permanent
+}

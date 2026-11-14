@@ -46,6 +46,8 @@
 }
 .gfield select option { color: #000; }
 .gfield--wide { grid-column: 1 / -1; }
+.gfield__name { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-sm); align-items: end; }
+@media (max-width: 520px) { .gfield__name { grid-template-columns: minmax(0, 1fr); } }
 .gfield__hint { font-size: 12px; color: rgba(255, 255, 255, 0.45); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .gate__link { border: 0; background: none; color: rgba(255, 255, 255, 0.6); font-size: 13px; padding: var(--sp-xs) 0; text-align: left; }
 .gate__link:hover { color: #fff; }

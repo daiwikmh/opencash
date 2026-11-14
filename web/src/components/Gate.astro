@@ -8,7 +8,7 @@ import { countries } from "../data/countries";
     <a class="gate__brand" href="/"><Mark />open<em>cash</em></a>
     <div class="gate__lines"><i></i><i></i><i></i><i></i></div>
     <Mark class="gate__logo" />
-    <small class="gate__legal">Remittance for open worlds</small>
+    <small class="gate__legal">Business payments for the world</small>
   </section>
   <section class="gate__panel">
     <div class="gate__card">
@@ -20,7 +20,18 @@ import { countries } from "../data/countries";
         <div class="gate__fields">
           <label class="gfield"><span>Your name</span><input name="founder" autocomplete="name" placeholder="Ada Okafor" /></label>
           <label class="gfield"><span>Business name</span><input name="business" placeholder="Acme Studio" /></label>
-          <label class="gfield"><span>Account handle</span><input name="handle" autocapitalize="none" spellcheck="false" placeholder="acme" /><small class="gfield__hint" data-handle-preview>acme.opencash.near</small></label>
+          <div class="gfield gfield--wide">
+            <span>Account name</span>
+            <div class="gfield__name">
+              <input name="handle" aria-label="Account name" autocapitalize="none" spellcheck="false" placeholder="acmestudio" />
+              <select name="kind" aria-label="Account type">
+                <option value="near">.near</option>
+                <option value="opencash">.opencash.near</option>
+                <option value="existing">Existing account</option>
+              </select>
+            </div>
+            <small class="gfield__hint" data-handle-preview>acmestudio.near · yours, not tied to opencash</small>
+          </div>
           <label class="gfield"><span>Country</span><select name="country"><option value="">Choose…</option>{countries.map((c) => <option value={c}>{c}</option>)}</select></label>
         </div>
         <p class="gate__status" data-gate-status role="status"></p>

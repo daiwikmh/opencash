@@ -199,6 +199,11 @@
 .dash__menu-item:focus-visible {
   background: var(--surface-hover);
 }
+.dash__menu-rule {
+  border: 0;
+  border-top: 1px solid var(--surface-line);
+  margin: var(--sp-xs) 0;
+}
 .dash__content {
   max-width: var(--content-max);
   margin: 0 auto;

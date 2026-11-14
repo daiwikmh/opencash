@@ -2,26 +2,20 @@ import { decodeSignedDelegate, type SignedDelegate } from "near-api-js";
 import { maxBatch, type Payout } from "shared";
 import { config } from "./config.js";
 import { operator } from "./near.js";
+import { isCompany as companyInDb } from "./business.js";
 import { emit } from "./developer.js";
 import { activateAgent, pendingAgent } from "./agents.js";
 import { markSent, quotedPayout, registerForUsdc } from "./payouts.js";
 
-const sponsoredMethods = new Set(["create_invoice"]);
-const maxGas = 100_000_000_000_000n;
 const maxTransferGas = 30_000_000_000_000n;
 
 type Delegate = SignedDelegate["delegateAction"];
 type Lookup = (company: string, payoutId: string) => Promise<Payout | null>;
 type AgentLookup = (company: string, accountId: string) => Promise<{ public_key: string } | null>;
+type CompanyLookup = (accountId: string) => Promise<boolean>;
 
-function contractCallRefusal(delegate: Delegate): string | null {
-  if (delegate.actions.length !== 1) return "One action per relayed call.";
-  const call = delegate.actions[0]?.functionCall;
-  if (!call) return "Only function calls are sponsored.";
-  if (!sponsoredMethods.has(call.methodName)) return `${call.methodName} is not sponsored.`;
-  if (call.deposit !== 0n) return "Sponsored calls cannot attach a deposit.";
-  if (call.gas > maxGas) return "Too much gas requested.";
-  return null;
+export function registeredCompany(accountId: string): Promise<boolean> {
+  return companyInDb(accountId);
 }
 
 async function payoutRefusal(delegate: Delegate, lookup: Lookup): Promise<string | null> {
@@ -62,12 +56,16 @@ async function agentCreationRefusal(delegate: Delegate, agents: AgentLookup): Pr
   return null;
 }
 
-export async function refusal(delegate: Delegate, lookup: Lookup = quotedPayout, agents: AgentLookup = pendingAgent): Promise<string | null> {
-  if (!delegate.senderId.endsWith(`.${config.parent}`)) return "Only opencash business accounts are sponsored.";
+export async function refusal(
+  delegate: Delegate,
+  lookup: Lookup = quotedPayout,
+  agents: AgentLookup = pendingAgent,
+  isCompany: CompanyLookup = registeredCompany,
+): Promise<string | null> {
+  if (!(await isCompany(delegate.senderId))) return "Only opencash business accounts are sponsored.";
   if (delegate.receiverId.endsWith(`.${delegate.senderId}`)) return agentCreationRefusal(delegate, agents);
-  if (delegate.receiverId === config.contract) return contractCallRefusal(delegate);
   if (delegate.receiverId === config.usdc) return payoutRefusal(delegate, lookup);
-  return "Only calls to the opencash registry and quoted USDC payouts are sponsored.";
+  return "Only quoted USDC payouts and agent creation are sponsored. Invoices are created through the opencash API.";
 }
 
 export async function relay(base64: string) {

@@ -1,17 +1,18 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { fromUnits, handlePattern, type AgreementKind, type Intake, type Invoice, type Payee, type PayoutRequest } from "shared";
+import { accountFor, accountIdPattern, fromUnits, handlePattern, type AccountKind, type AgreementKind, type Intake, type Invoice, type Payee, type PayoutRequest } from "shared";
 import { advise } from "./advisor.js";
 import { loadApplication, readApplication, submitApplication, type SignedRequest } from "./applications.js";
 import { generateDocument, readDocument, uploadDocument } from "./documents.js";
 import { config } from "./config.js";
-import { accountExists, openCompany, usdcBalance, view } from "./near.js";
-import { checkPending, getInvoice, invoiceStatus, payTokens, quoteInvoice, recordWalletSettlement } from "./payments.js";
+import { accountExists, hasFullAccessKey, openCompany, usdcBalance } from "./near.js";
+import { checkPending, invoiceStatus, payTokens, quoteInvoice, recordWalletSettlement } from "./payments.js";
+import { createInvoice, findInvoice, issueUnrecorded, listInvoices, publicInvoice, reconcileOpen } from "./invoices.js";
 import { relay } from "./relayer.js";
 import { createAgreement, getAgreement, listAgreements, signAgreement, voidAgreement } from "./agreements.js";
 import { agentFetch, agentForKey, agentPay, agentPayments, agentSelf, createAgent, issueAgentKey, listAgents, redeemPayment, sweepAgent, updateAgent } from "./agents.js";
 import { listSettlements, settle as settleX402, supported as x402Supported, verify as verifyX402, type FacilitatorRequest } from "./facilitator.js";
-import { getBusiness } from "./business.js";
+import { getBusiness, isCompany } from "./business.js";
 import { describeLinkCode, dispatchOutbox, enqueue, listLinks as listChatLinks, redeemLinkCode, unlinkFor, type Platform, type Sender } from "./chat/outbox.js";
 import { telegram } from "./chat/telegram.js";
 import { xmtp } from "./chat/xmtp.js";
@@ -30,6 +31,7 @@ import {
   listLinks,
   listWebhooks,
   payLink,
+  topUp,
   payUrl,
   publicLink,
   revokeApiKey,
@@ -66,16 +68,34 @@ app.post<{ Body: { country: string; plan: string; company: string } }>("/api/adv
   return advise({ country, plan, company: company ?? "" });
 });
 
+const accountKinds: AccountKind[] = ["near", "opencash", "existing"];
+
 app.post<{
-  Body: { handle: string; legalName: string; country: string; publicKey: string };
+  Body: { kind?: AccountKind; accountId?: string; legalName: string; country: string; publicKey: string };
 }>("/api/companies", async (request) => {
-  const { handle, legalName, country, publicKey } = request.body ?? ({} as never);
-  if (!handlePattern.test(handle ?? "")) fail(400, "Handle: lowercase letters, numbers and dashes, 1-32 characters.");
+  const { legalName, country, publicKey } = request.body ?? ({} as never);
+  const kind = request.body?.kind ?? "opencash";
+  const accountId = String(request.body?.accountId ?? "").trim().toLowerCase();
+  if (!accountKinds.includes(kind)) fail(400, "kind must be near, opencash or existing.");
+  if (kind === "existing") {
+    if (!accountIdPattern.test(accountId)) fail(400, "Enter a NEAR account name, e.g. ada.business.near.");
+  } else {
+    const handle = accountId.split(".")[0];
+    if (!handlePattern.test(handle) || accountFor(kind, handle) !== accountId) fail(400, "Name: lowercase letters, numbers and dashes, 1-32 characters.");
+  }
   if (!/^ed25519:[1-9A-HJ-NP-Za-km-z]{43,44}$/.test(publicKey ?? "")) fail(400, "Invalid passkey public key.");
   if (!legalName?.trim() || !country?.trim()) fail(400, "Business name and country are required.");
-  if (await accountExists(`${handle}.${config.parent}`)) fail(409, `${handle}.${config.parent} is taken. Pick another handle.`);
+  if (kind === "existing") {
+    if (!(await accountExists(accountId))) fail(404, `${accountId} doesn't exist on NEAR.`);
+    if (!(await hasFullAccessKey(accountId, publicKey))) fail(403, `Add your passkey key to ${accountId} first.`);
+    const signer = await verifyNearAuth(request.headers["x-near-auth"] as string | undefined, "open-company", accountId);
+    if (signer !== accountId) fail(403, `Sign with a key on ${accountId}.`);
+  } else if (await accountExists(accountId)) {
+    fail(409, `${accountId} is taken. Pick another name.`);
+  }
+  if (await isCompany(accountId)) fail(409, `${accountId} already has an opencash account. Sign in instead.`);
   if (!allowOpening(request.ip)) fail(429, "Too many companies opened from this network. Try again in an hour.");
-  return openCompany({ handle, publicKey, legalName: legalName.trim(), country: country.trim() });
+  return openCompany({ kind, accountId, publicKey, legalName: legalName.trim(), country: country.trim() });
 });
 
 app.get<{ Params: { account: string } }>("/api/companies/:account", async (request) => {
@@ -88,9 +108,13 @@ app.get<{ Params: { account: string } }>("/api/companies/:account/balance", asyn
   usdc: await usdcBalance(request.params.account),
 }));
 
-app.get<{ Params: { account: string } }>("/api/companies/:account/invoices", async (request) =>
-  view<Invoice[]>("list_invoices", { account_id: request.params.account, from: 0, limit: 100 }),
-);
+app.get<{ Params: { account: string } }>("/api/companies/:account/invoices", async (request) => listInvoices(request.params.account));
+
+app.post<{ Body: { client_name: string; due_ms: number; items: { description: string; amount: string }[] } }>("/api/invoices", async (request) => {
+  const company = await business(request, "create-invoice");
+  const body = request.body ?? ({} as never);
+  return createInvoice(company, { client_name: body.client_name, due_ms: Number(body.due_ms), items: body.items, source: "direct", reference: null });
+});
 
 app.post<{ Body: { signedDelegate: string } }>("/api/relay", async (request) => {
   if (!request.body?.signedDelegate) fail(400, "signedDelegate is required");
@@ -98,8 +122,8 @@ app.post<{ Body: { signedDelegate: string } }>("/api/relay", async (request) => 
   return { txHash };
 });
 
-app.get<{ Params: { id: string } }>("/api/invoices/:id", async (request) => {
-  const invoice = await getInvoice(request.params.id);
+app.get<{ Params: { id: string }; Querystring: { k?: string } }>("/api/invoices/:id", async (request) => {
+  const invoice = await publicInvoice(request.params.id, request.query.k);
   const company = await getBusiness(invoice.company);
   return { ...invoice, legal_name: company?.legal_name ?? invoice.company, jurisdiction: company?.jurisdiction ?? null };
 });
@@ -160,6 +184,7 @@ app.delete<{ Params: { id: string } }>("/api/payees/:id", async (request) => {
 app.post<{ Body: { title: string; description?: string; amount?: string | null } }>("/api/links", async (request) =>
   createLink(await business(request, "create-link"), request.body ?? ({} as never)),
 );
+app.post<{ Body: { amount?: string } }>("/api/topups", async (request) => topUp(await business(request, "top-up"), request.body ?? {}));
 app.get("/api/links", async (request) => listLinks(await business(request, "list-links")));
 app.patch<{ Params: { id: string }; Body: { active: boolean } }>("/api/links/:id", async (request) =>
   setLinkActive(await business(request, "update-link"), request.params.id, Boolean(request.body?.active)),
@@ -197,7 +222,7 @@ app.post("/api/developer/webhooks/test", async (request) => {
 
 type ApiItem = { description: string; amount: string };
 function apiInvoice(invoice: Invoice) {
-  return { ...invoice, amount_usd: fromUnits(invoice.amount), pay_url: payUrl(invoice.id) };
+  return { ...invoice, amount_usd: fromUnits(invoice.amount), pay_url: payUrl(invoice) };
 }
 
 app.post<{ Body: { client_name: string; due_date?: string; items: ApiItem[]; reference?: string } }>("/v1/invoices", async (request) => {
@@ -226,14 +251,14 @@ app.post<{ Body: { amount: string; description: string; customer_name?: string; 
 
 app.get<{ Params: { id: string } }>("/v1/invoices/:id", async (request) => {
   const company = await companyForKey(request.headers.authorization);
-  const invoice = await view<Invoice | null>("get_invoice", { id: request.params.id });
+  const invoice = await findInvoice(request.params.id);
   if (!invoice || invoice.company !== company) fail(404, "Invoice not found.");
   return apiInvoice(invoice);
 });
 
 app.get<{ Querystring: { status?: string } }>("/v1/invoices", async (request) => {
   const company = await companyForKey(request.headers.authorization);
-  const list = await view<Invoice[]>("list_invoices", { account_id: company, from: 0, limit: 100 });
+  const list = await listInvoices(company);
   return list.filter((i) => !request.query.status || i.status === request.query.status).map(apiInvoice);
 });
 
@@ -302,25 +327,30 @@ app.get<{ Params: { account: string }; Querystring: { public_key: string; signed
   },
 );
 
-app.post<{ Params: { id: string }; Body: { originAsset: string; refundTo: string } }>("/api/invoices/:id/quote", async (request) => {
+app.post<{ Params: { id: string }; Querystring: { k?: string }; Body: { originAsset: string; refundTo: string } }>("/api/invoices/:id/quote", async (request) => {
   const { originAsset, refundTo } = request.body ?? ({} as never);
   if (!originAsset || !refundTo) fail(400, "originAsset and refundTo are required");
-  return quoteInvoice(request.params.id, originAsset, refundTo);
+  return quoteInvoice(request.params.id, request.query.k ?? "", originAsset, refundTo);
 });
 
-app.post<{ Params: { id: string }; Body: { tx_hash: string; payer: string } }>("/api/invoices/:id/settled", async (request) => {
+app.post<{ Params: { id: string }; Querystring: { k?: string }; Body: { tx_hash: string; payer: string } }>("/api/invoices/:id/settled", async (request) => {
   const { tx_hash, payer } = request.body ?? ({} as never);
   if (!tx_hash || !payer) fail(400, "tx_hash and payer are required");
-  return recordWalletSettlement(request.params.id, tx_hash, payer);
+  return recordWalletSettlement(request.params.id, request.query.k ?? "", tx_hash, payer);
 });
 
-app.get<{ Params: { id: string } }>("/api/invoices/:id/status", async (request) => invoiceStatus(request.params.id));
+app.get<{ Params: { id: string }; Querystring: { k?: string } }>("/api/invoices/:id/status", async (request) => {
+  await publicInvoice(request.params.id, request.query.k);
+  return invoiceStatus(request.params.id);
+});
 
 await app.listen({ port: config.port, host: "0.0.0.0" });
 
 if (process.env.OPERATOR_PRIVATE_KEY) {
   setInterval(() => {
     checkPending((message) => app.log.info(message)).catch((error) => app.log.warn(`pending check skipped: ${String(error)}`));
+    issueUnrecorded((message) => app.log.info(message)).catch((error) => app.log.warn(`invoice recording skipped: ${String(error)}`));
+    reconcileOpen((message) => app.log.info(message)).catch((error) => app.log.warn(`invoice reconcile skipped: ${String(error)}`));
     checkPayouts(async (payout) => {
       app.log.info(`payout ${payout.id} is now ${payout.status}`);
       await emit(payout.company, `payout.${payout.status}`, payout);

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import type { AgreementKind, Company, Intake, Invoice, StoredDocument } from "shared";
+import type { AgreementKind, Company, Intake, StoredDocument } from "shared";
 import { getAgreement } from "./agreements.js";
 import { getBusiness } from "./business.js";
 import { db } from "./db.js";
-import { view } from "./near.js";
+import { findInvoice } from "./invoices.js";
 import { verifyNearAuth } from "./nearAuth.js";
 import { bylaws, operatingAgreement, serviceAgreement } from "./templates.js";
 import { open, seal } from "./vault.js";
@@ -56,7 +56,7 @@ export async function generateDocument(
   const parties = body.parties?.length ? body.parties : [account];
   const now = Date.now();
   if (body.kind === "service-agreement") {
-    const invoice = await view<Invoice | null>("get_invoice", { id: body.invoice_id ?? "" });
+    const invoice = await findInvoice(body.invoice_id ?? "");
     if (!invoice || invoice.company !== account) fail(404, "Pick one of your own invoices.");
     const text = serviceAgreement(company, invoice, body.terms ?? "", parties, now);
     return store(account, `Service agreement · ${invoice.client_name} · ${invoice.id}`, "text/plain", Buffer.from(text, "utf8"));
