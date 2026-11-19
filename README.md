@@ -380,8 +380,6 @@ Requirements: Node 22+, pnpm 9 (`corepack pnpm`), Docker (Postgres), Rust with `
 | End-to-end payout on mainnet (from Telegram) | ✅ 0.05 USDC from `northwind.opencash.near` to `dev.opencash.near`, requested in the Telegram bot, signed with the passkey, status `completed` |
 | Agreement signed with passkeys | ✅ one agreement `executed` |
 | Payroll, link payment and webhook delivery on mainnet | ⏳ not yet run |
-| Mobile app on a device | ⏳ typechecks only; passkeys need a domain with iOS/Android association files |
-| Formation filing with a provider (doola / FileForms) | ❌ not wired; see [docs/formation-research.md](docs/formation-research.md) |
 
 Known limits: if a payer requests a second quote for the same invoice, only the latest deposit address is tracked. Payouts can't be created through the API, because sending money requires the owner's passkey.
 
